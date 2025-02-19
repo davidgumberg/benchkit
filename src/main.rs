@@ -44,10 +44,6 @@ enum Commands {
         /// Benchmark config
         #[arg(short, long, default_value = "benchmark.yml")]
         config: PathBuf,
-
-        /// Directory to place statically-built binaries in
-        #[arg(long)]
-        out_dir: PathBuf,
     },
     /// Run benchmarks
     Run {
@@ -156,8 +152,8 @@ async fn main() -> Result<()> {
                 }
             }
         },
-        Commands::Build { config, out_dir } => {
-            let builder = benchmarks::Builder::new(config, out_dir)?;
+        Commands::Build { config } => {
+            let builder = benchmarks::Builder::new(config)?;
             builder.build()?;
         }
         Commands::Run { command } => match command {

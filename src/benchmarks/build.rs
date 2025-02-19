@@ -6,11 +6,10 @@ use super::{config, Config};
 
 pub struct Builder {
     config: Config,
-    out_dir: PathBuf,
 }
 
 impl Builder {
-    pub fn new(config_path: &PathBuf, out_dir: &PathBuf) -> Result<Self> {
+    pub fn new(config_path: &PathBuf) -> Result<Self> {
         let config = config::load_config(config_path)?;
 
         if !config.global.source.exists() {
@@ -46,12 +45,9 @@ impl Builder {
         let mut config = config;
         config.global.commits = full_commits;
 
-        std::fs::create_dir_all(out_dir)?;
+        std::fs::create_dir_all(&config.global.out_dir)?;
 
-        Ok(Self {
-            config,
-            out_dir: out_dir.to_path_buf(),
-        })
+        Ok(Self { config })
     }
 
     pub fn build(&self) -> Result<()> {
@@ -191,8 +187,7 @@ impl Builder {
     fn run_build(&self, commit: &str) -> Result<()> {
         let short_commit = &commit[..12];
 
-        // In CI need to specify building using all cores
-        // TODO: Should we set env vars here like this, or another way...
+        // Create base command depending on CI environment
         let mut cmd = if std::env::var("CI").is_ok() {
             let mut cmd = Command::new("taskset");
             cmd.current_dir(&self.config.global.source)
@@ -201,18 +196,24 @@ impl Builder {
                 .arg("chrt")
                 .arg("-f")
                 .arg("1")
-                .arg("contrib/guix/guix-build")
-                .env("FORCE_DIRTY_WORKTREE", "1")
-                .env("HOSTS", "x86_64-linux-gnu")
-                .env("SOURCES_PATH", "/data/SOURCES_PATH")
-                .env("BASE_CACHE", "/data/BASE_CACHE");
+                .arg("contrib/guix/guix-build");
             cmd
         } else {
             let mut cmd = Command::new("contrib/guix/guix-build");
-            cmd.current_dir(&self.config.global.source)
-                .env("FORCE_DIRTY_WORKTREE", "1");
+            cmd.current_dir(&self.config.global.source);
             cmd
         };
+
+        // Always set this as we apply patches but we don't want to commit
+        cmd.env("FORCE_DIRTY_WORKTREE", "1");
+
+        // Conditionally set environment variables if they exist
+        let env_vars = ["HOSTS", "SOURCES_PATH", "BASE_CACHE", "SDK_PATH"];
+        for var in &env_vars {
+            if let Ok(value) = std::env::var(var) {
+                cmd.env(var, value);
+            }
+        }
 
         let status = cmd
             .status()
@@ -240,10 +241,10 @@ impl Builder {
 
         let status = Command::new("git")
             .current_dir(&self.config.global.source)
-            .arg("restore")
-            .arg(".")
+            .arg("reset")
+            .arg("--hard")
             .status()
-            .with_context(|| "Failed to restore git patches after build")?;
+            .with_context(|| "Failed to reset uncommited patches after build")?;
 
         if !status.success() {
             anyhow::bail!("Git restore failed.",);
@@ -259,7 +260,11 @@ impl Builder {
             .global
             .source
             .join(format!("bitcoin-{}/bin/bitcoind", short_commit));
-        let dest_path = self.out_dir.join(format!("bitcoind-{}", commit));
+        let dest_path = self
+            .config
+            .global
+            .out_dir
+            .join(format!("bitcoind-{}", commit));
 
         std::fs::copy(&src_path, &dest_path)
             .with_context(|| format!("Failed to copy binary for commit {}", commit))?;

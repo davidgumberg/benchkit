@@ -10,6 +10,7 @@ pub struct GlobalConfig {
     pub source: PathBuf,
     pub branch: String,
     pub commits: Vec<String>,
+    pub out_dir: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,8 +31,37 @@ pub fn load_config(config_path: &PathBuf) -> Result<Config> {
         anyhow::bail!("Config file not found: {:?}", config_path);
     }
 
+    let config_dir = config_path
+        .parent()
+        .context("Failed to get config directory")?;
+
     let contents = std::fs::read_to_string(config_path)
         .with_context(|| format!("Failed to read config file: {:?}", config_path))?;
-    serde_yaml::from_str(&contents)
-        .with_context(|| format!("Failed to parse YAML from file: {:?}", config_path))
+
+    let mut config: Config = serde_yaml::from_str(&contents)
+        .with_context(|| format!("Failed to parse YAML from file: {:?}", config_path))?;
+
+    // Resolve relative paths to absolute paths
+    if !config.global.source.is_absolute() {
+        config.global.source = config_dir
+            .join(&config.global.source)
+            .canonicalize()
+            .with_context(|| {
+                format!("Failed to resolve source path: {:?}", config.global.source)
+            })?;
+    }
+
+    if !config.global.out_dir.is_absolute() {
+        config.global.out_dir = config_dir
+            .join(&config.global.out_dir)
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "Failed to resolve out_dir path: {:?}",
+                    config.global.out_dir
+                )
+            })?;
+    }
+
+    Ok(config)
 }
