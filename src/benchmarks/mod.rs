@@ -52,15 +52,16 @@ impl Runner {
     }
 
     async fn run_benchmark(&self, bench: &BenchmarkConfig) -> Result<()> {
-        println!("Running benchmark: {}", bench.name);
-        self.run_hyperfine(bench)?;
+        println!("Running benchmark: {:?}", bench);
 
+        // First merge the hyperfine options
         let mut merged_hyperfine = HashMap::new();
         if let Some(global_opts) = &self.config.global.hyperfine {
             merged_hyperfine.extend(global_opts.clone());
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
 
+        // Get the export path before running hyperfine
         let export_path = merged_hyperfine
             .get("export_json")
             .and_then(Value::as_str)
@@ -71,6 +72,10 @@ impl Runner {
                 )
             })?;
 
+        // Run hyperfine with merged options
+        self.run_hyperfine(bench, &merged_hyperfine)?;
+
+        // Check for and process results
         if !Path::new(export_path).exists() {
             anyhow::bail!(
                 "Expected JSON results file not found at '{}' for benchmark '{}'",
@@ -82,6 +87,7 @@ impl Runner {
         let results_json = std::fs::read_to_string(export_path)
             .with_context(|| format!("Failed to read results file: {}", export_path))?;
 
+        // Store results in database
         crate::database::store_results(
             &self.database_url,
             &bench.name,
@@ -91,14 +97,19 @@ impl Runner {
         )
         .await?;
 
+        // Cleanup
         std::fs::remove_file(export_path)
             .with_context(|| format!("Failed to remove results file: {}", export_path))?;
 
         Ok(())
     }
 
-    fn run_hyperfine(&self, bench: &BenchmarkConfig) -> Result<()> {
-        let mut cmd = self.build_hyperfine_command(bench)?;
+    fn run_hyperfine(
+        &self,
+        bench: &BenchmarkConfig,
+        merged_opts: &HashMap<String, Value>,
+    ) -> Result<()> {
+        let mut cmd = self.build_hyperfine_command(bench, merged_opts)?;
 
         println!("Running hyperfine command: {:?}", cmd);
         let status = cmd.status().with_context(|| {
@@ -112,28 +123,28 @@ impl Runner {
         Ok(())
     }
 
-    fn build_hyperfine_command(&self, bench: &BenchmarkConfig) -> Result<Command> {
+    fn build_hyperfine_command(
+        &self,
+        bench: &BenchmarkConfig,
+        options: &HashMap<String, Value>,
+    ) -> Result<Command> {
         let mut cmd = Command::new("hyperfine");
         let command_str;
 
-        let mut final_options = HashMap::new();
-        if let Some(global_opts) = &self.config.global.hyperfine {
-            final_options.extend(global_opts.clone());
-        }
-
-        final_options.extend(bench.hyperfine.clone());
-
-        if let Some(Value::String(command)) = final_options.remove("command") {
+        if let Some(Value::String(command)) = options.get("command") {
             command_str = if let Some(wrapper) = &self.config.global.wrapper {
                 format!("{} {}", wrapper, command)
             } else {
-                command
+                command.clone()
             };
         } else {
             anyhow::bail!("command is required in hyperfine config");
         }
 
-        for (key, value) in final_options {
+        for (key, value) in options {
+            if key == "command" {
+                continue; // Already handled
+            }
             let arg_key = format!("--{}", key.replace('_', "-"));
             match value {
                 Value::String(s) => {
@@ -181,7 +192,7 @@ impl Runner {
                     }
                 }
                 Value::Bool(b) => {
-                    if b {
+                    if *b {
                         cmd.arg(arg_key);
                     }
                 }
@@ -197,6 +208,7 @@ impl Runner {
             }
         }
 
+        println!("Built hyperfine command: {:?}", cmd);
         Ok(cmd)
     }
 }

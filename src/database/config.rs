@@ -270,6 +270,7 @@ pub async fn check_connection(conn_string: &str) -> Result<()> {
         .await
         .with_context(|| "Database query timeout")?
         .with_context(|| "Failed to execute test query")?;
+    println!("Database connection OK");
 
     Ok(())
 }

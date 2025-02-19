@@ -37,7 +37,10 @@ impl Builder {
                 .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
                 .trim()
                 .to_string();
-            println!("Revolved commit {} to full hash {}", commit, full_hash);
+            println!(
+                "Resolved config commit {} to full hash {}",
+                commit, full_hash
+            );
             full_commits.push(full_hash);
         }
 

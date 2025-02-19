@@ -62,6 +62,6 @@ pub fn load_config(config_path: &PathBuf) -> Result<Config> {
                 )
             })?;
     }
-
+    println!("Using configuration\n{:?}", config);
     Ok(config)
 }

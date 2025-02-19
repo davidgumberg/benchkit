@@ -1,3 +1,5 @@
+use std::{path::PathBuf, str::FromStr};
+
 use anyhow::Result;
 use benchkit::benchmarks::Runner;
 use rand::Rng;
@@ -36,7 +38,7 @@ async fn test_example_benchmark() -> Result<()> {
     let run_id = rng.random_range(100000000..1000000000);
 
     let runner = Runner::new(
-        "example.benchmark.yml",
+        &PathBuf::from_str("./example.benchmark.yml")?,
         &conn_string,
         Some(pr_number),
         Some(run_id),
