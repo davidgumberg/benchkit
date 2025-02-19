@@ -157,7 +157,7 @@ async fn main() -> Result<()> {
             }
         },
         Commands::Build { config, out_dir } => {
-            let builder = benchmarks::Builder::new(&config, &out_dir)?;
+            let builder = benchmarks::Builder::new(config, out_dir)?;
             builder.build()?;
         }
         Commands::Run { command } => match command {

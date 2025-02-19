@@ -20,7 +20,7 @@ impl Builder {
             );
         }
 
-        // Expand any short commit hashes to full hashes
+        // Expand any short commit hashes or symbolic refs to full hashes
         let mut full_commits = Vec::new();
         for commit in &config.global.commits {
             let output = Command::new("git")
@@ -38,9 +38,13 @@ impl Builder {
                 .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
                 .trim()
                 .to_string();
-
+            println!("Revolved commit {} to full hash {}", commit, full_hash);
             full_commits.push(full_hash);
         }
+
+        // Update config with resolved full commit hashes
+        let mut config = config;
+        config.global.commits = full_commits;
 
         std::fs::create_dir_all(out_dir)?;
 
@@ -88,6 +92,7 @@ impl Builder {
 
     fn build_commit(&self, commit: &str) -> Result<()> {
         self.checkout_commit(commit)?;
+        self.apply_patches()?;
         self.run_build(commit)?;
         self.copy_binary(commit)?;
         Ok(())
@@ -107,10 +112,87 @@ impl Builder {
         Ok(())
     }
 
+    fn apply_patches(&self) -> Result<()> {
+        let patches = ["assumeutxo.patch", "guix.patch"];
+
+        // Get the absolute path to the patches directory
+        let patches_dir = std::env::current_dir()?.join("patches");
+
+        // First verify all patches exist
+        for patch in &patches {
+            let patch_path = patches_dir.join(patch);
+            if !patch_path.exists() {
+                anyhow::bail!("Patch file not found: {}", patch_path.display());
+            }
+        }
+
+        // Apply each patch
+        for patch in &patches {
+            let patch_path = patches_dir.join(patch);
+            println!("Applying patch: {}", patch_path.display());
+
+            // First try with -3 for git-apply to attempt 3-way merge
+            let status = Command::new("git")
+                .current_dir(&self.config.global.source)
+                .arg("apply")
+                .arg("-3")
+                .arg("--whitespace=fix")
+                .arg(patch_path.display().to_string())
+                .status()
+                .with_context(|| format!("Failed to execute git apply for patch {}", patch))?;
+
+            if !status.success() {
+                // If 3-way merge fails, try to apply patch with --reject
+                println!(
+                    "Warning: 3-way merge failed for {}, attempting with --reject",
+                    patch
+                );
+
+                let status = Command::new("git")
+                    .current_dir(&self.config.global.source)
+                    .arg("apply")
+                    .arg("--reject")
+                    .arg("--whitespace=fix")
+                    .arg(patch_path.display().to_string())
+                    .status()
+                    .with_context(|| {
+                        format!("Failed to execute git apply --reject for patch {}", patch)
+                    })?;
+
+                if !status.success() {
+                    anyhow::bail!("Failed to apply patch {} even with --reject", patch);
+                }
+
+                // Check for .rej files which indicate partial application
+                let output = Command::new("find")
+                    .current_dir(&self.config.global.source)
+                    .arg(".")
+                    .arg("-name")
+                    .arg("*.rej")
+                    .output()
+                    .with_context(|| "Failed to search for .rej files")?;
+
+                if !output.stdout.is_empty() {
+                    let rej_files = String::from_utf8_lossy(&output.stdout);
+                    anyhow::bail!(
+                        "Patch {} was only partially applied. Review these .rej files:\n{}",
+                        patch,
+                        rej_files
+                    );
+                }
+            }
+
+            println!("Successfully applied patch: {}", patch);
+        }
+
+        Ok(())
+    }
+
     fn run_build(&self, commit: &str) -> Result<()> {
         let short_commit = &commit[..12];
 
         // In CI need to specify building using all cores
+        // TODO: Should we set env vars here like this, or another way...
         let mut cmd = if std::env::var("CI").is_ok() {
             let mut cmd = Command::new("taskset");
             cmd.current_dir(&self.config.global.source)
@@ -119,19 +201,20 @@ impl Builder {
                 .arg("chrt")
                 .arg("-f")
                 .arg("1")
-                .arg("contrib/guix/guix-build");
+                .arg("contrib/guix/guix-build")
+                .env("FORCE_DIRTY_WORKTREE", "1")
+                .env("HOSTS", "x86_64-linux-gnu")
+                .env("SOURCES_PATH", "/data/SOURCES_PATH")
+                .env("BASE_CACHE", "/data/BASE_CACHE");
             cmd
         } else {
             let mut cmd = Command::new("contrib/guix/guix-build");
-            cmd.current_dir(&self.config.global.source);
+            cmd.current_dir(&self.config.global.source)
+                .env("FORCE_DIRTY_WORKTREE", "1");
             cmd
         };
 
         let status = cmd
-            // Remember to re-set these in CI...
-            // .env("HOSTS", "x86_64-linux-gnu")
-            // .env("SOURCES_PATH", "/data/SOURCES_PATH")
-            // .env("BASE_CACHE", "/data/BASE_CACHE")
             .status()
             .with_context(|| format!("Failed to run build for commit {}", commit))?;
 
