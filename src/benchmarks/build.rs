@@ -48,7 +48,7 @@ impl Builder {
         let mut config = config;
         config.global.commits = full_commits;
 
-        std::fs::create_dir_all(&config.global.out_dir)?;
+        std::fs::create_dir_all(&config.global.bin_dir)?;
 
         Ok(Self { config })
     }
@@ -266,7 +266,7 @@ impl Builder {
         let dest_path = self
             .config
             .global
-            .out_dir
+            .bin_dir
             .join(format!("bitcoind-{}", commit));
 
         std::fs::copy(&src_path, &dest_path)

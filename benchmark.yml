@@ -26,7 +26,7 @@ global:
   commits: ["HEAD", "HEAD~1"]
 
   # The directory built binaries will be copied to.
-  out_dir: ./binaries
+  bin_dir: ./binaries
 
 # Local benchmark config.
 benchmarks:

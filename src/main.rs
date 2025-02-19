@@ -30,6 +30,9 @@ struct Cli {
 
     #[arg(long, env = "PGPASSWORD", default_value = "benchcoin")]
     pg_password: String,
+
+    #[arg(long, env = "BENCHCOIN_HOME", help = "Path to benchkit home directory")]
+    home_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -122,6 +125,10 @@ impl From<&Cli> for database::DatabaseConfig {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     let db_config = database::DatabaseConfig::from(&cli);
+    let home_config = benchkit::home::HomeConfig::from_option(cli.home_dir.as_deref());
+    home_config.initialize()?;
+    println!("Using home directory: {:?}", home_config.home_dir);
+    println!("Using binaries_dir: {:?}", home_config.binaries_dir);
 
     match &cli.command {
         Commands::Db { command } => match command {
@@ -163,6 +170,11 @@ async fn main() -> Result<()> {
                 run_id,
             } => {
                 database::check_connection(&db_config.connection_string()).await?;
+                // First we will build the binaries
+                // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
+                // same commit binary twice?
+                let builder = benchmarks::Builder::new(config)?;
+                builder.build()?;
                 let runner = benchmarks::Runner::new(
                     config,
                     &db_config.connection_string(),

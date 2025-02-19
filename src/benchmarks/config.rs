@@ -10,7 +10,7 @@ pub struct GlobalConfig {
     pub source: PathBuf,
     pub branch: String,
     pub commits: Vec<String>,
-    pub out_dir: PathBuf,
+    pub bin_dir: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,14 +51,14 @@ pub fn load_config(config_path: &PathBuf) -> Result<Config> {
             })?;
     }
 
-    if !config.global.out_dir.is_absolute() {
-        config.global.out_dir = config_dir
-            .join(&config.global.out_dir)
+    if !config.global.bin_dir.is_absolute() {
+        config.global.bin_dir = config_dir
+            .join(&config.global.bin_dir)
             .canonicalize()
             .with_context(|| {
                 format!(
                     "Failed to resolve out_dir path: {:?}",
-                    config.global.out_dir
+                    config.global.bin_dir
                 )
             })?;
     }
