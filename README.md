@@ -49,54 +49,115 @@ benchkit db delete
 
 Build bitcoind binaries:
 ```bash
-benchkit build --src-dir /path/to/benchcoin/src --commits 7fd2804faf,668c9bb609 --out-dir ./binaries
+benchkit build
 ```
 
 ### Running Benchmarks
 
 Run all benchmarks from config:
 ```bash
-benchkit run all --config benchmark.yml
+benchkit run all
 ```
 
 Run a specific benchmark:
 ```bash
-benchkit run single --config benchmark.yml --name "benchmark-name"
+benchkit run single --name "benchmark-name"
 ```
 
 ### Configuration
 
-Benchkit uses YAML configuration files to define benchmarks. Example configuration:
+Benchkit uses YAML configuration files to define it's own settings and configure benchmarks.
+
+A typical benchkit *config.yml* looks like:
 
 ```yaml
+---
+# Benchkit home directory
+home_dir: $HOME/.local/state/benchkit
+
+# The directory intermediate built binaries will be saved to.
+bin_dir: $HOME/.local/state/benchkit/binaries
+
+# Database configuration
+database:
+
+  # postgres host
+  host: localhost
+
+  # postgres port
+  port: 5432
+
+  # database name
+  database: benchmarks
+
+  # postgres username
+  user: benchkit
+
+  # postgres password
+  password: benchcoin
+```
+
+And a *benchmark.yml*:
+
+```yaml
+---
+# Global benchmarking options.
 global:
+
+  # Global hyperfine option defaults.
+  # Will be overwritten by local options specified per-benchmark.
   hyperfine:
     warmup: 1
     runs: 5
     export_json: results.json
     shell: /bin/bash
-    show_output: true
+    show_output: false
+
+  # An optional command to wrap the hyperfine command.
   wrapper: "taskset -c 1-14"
 
+  # Path to source code (required).
+  # Can point to a local or online fork of bitcoin/bitcoin.
+  source: $HOME/src/core/bitcoin
+
+  # Which branch of the source to check out (required).
+  branch: benchmark-test
+
+  # Commits to build binaries from (required).
+  # A list of one or more all found in <branch>
+  commits: ["62bd1960fdf", "e932c6168b5"]
+
+# Local benchmark config.
 benchmarks:
-  - name: "Example Benchmark"
-    env:
-      RUST_LOG: "debug"
+
+  # benchmark name (required).
+  - name: "Check bitcoind version"
+
+    # Bitcoin network to run on (main, test, testnet4, signet, regtest)
+    network: signet
+
+    # Local hyperfine options.
+    # These override global hyperfine options in case of conflict.
+    # Uses regular hyperfine syntax.
     hyperfine:
-      command: "sleep {duration}s"
+
+      # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
+      # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
+      command: "bitcoind -dbcache={dbcache} --version"
+
+      warmup: 5
+      runs: 10
+
+      # A list of zero or more parameters.
+      # These will be tried as a matrix.
       parameter_lists:
-        - var: duration
-          values: ["0.1", "0.2", "0.5"]
+
+        # The variable name to use in hyperfine command substitution.
+        - var: dbcache
+          # A list of values to substitute in.
+          values: ["450", "32000"]
+
 ```
-
-### Environment Variables
-
-Database configuration can be set via environment variables:
-- `PGHOST` (default: localhost)
-- `PGPORT` (default: 5432)
-- `PGDATABASE` (default: benchmarks)
-- `PGUSER` (default: benchkit)
-- `PGPASSWORD` (default: benchcoin)
 
 ## Contributing
 
