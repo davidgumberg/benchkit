@@ -10,6 +10,7 @@ use crate::database::DatabaseConfig;
 pub struct AppConfig {
     pub home_dir: PathBuf,
     pub bin_dir: PathBuf,
+    pub snapshot_dir: PathBuf,
     pub database: DatabaseConfig,
 }
 
@@ -39,9 +40,17 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
     config.home_dir = PathBuf::from(expanded_home);
     let expanded_bin_dir = expand_path(config.bin_dir.to_str().unwrap_or(""));
     config.bin_dir = PathBuf::from(expanded_bin_dir);
+    let expanded_snapshot_dir = expand_path(config.snapshot_dir.to_str().unwrap_or(""));
+    config.snapshot_dir = PathBuf::from(expanded_snapshot_dir);
 
     // Resolve relative paths to absolute paths and create directories
-    for path in [&mut config.home_dir, &mut config.bin_dir].iter_mut() {
+    for path in [
+        &mut config.home_dir,
+        &mut config.bin_dir,
+        &mut config.snapshot_dir,
+    ]
+    .iter_mut()
+    {
         let abs_path = if path.is_absolute() {
             path.clone()
         } else {

@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+use std::{collections::HashMap, path::PathBuf};
 
 mod build;
 pub use build::Builder;
@@ -10,8 +11,11 @@ mod config;
 pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
 mod hooks;
 use hooks::HookManager;
+// mod object_storage;
+// pub use object_storage::ObjectStorage;
 
 use crate::config::AppConfig;
+use crate::types::Network;
 
 pub struct Runner {
     app_config: AppConfig,
@@ -49,6 +53,8 @@ impl Runner {
 
     pub async fn run(&self) -> Result<()> {
         for bench in &self.bench_config.benchmarks {
+            self.check_snapshot(bench, &self.app_config.snapshot_dir)
+                .await?;
             self.run_benchmark(bench).await?;
         }
         Ok(())
@@ -62,12 +68,35 @@ impl Runner {
             .find(|b| b.name == name)
             .with_context(|| format!("Benchmark not found: {}", name))?;
 
+        self.check_snapshot(bench, &self.app_config.snapshot_dir)
+            .await?;
         self.run_benchmark(bench).await
+    }
+
+    async fn check_snapshot(&self, bench: &SingleConfig, snapshot_dir: &Path) -> Result<()> {
+        // Check if we have the correct snapshot
+        let network = Network::from_str(&bench.network, true)
+            .map_err(|e| anyhow::anyhow!("{}", e))
+            .with_context(|| format!("Invalid network: {:?}", bench.network))?;
+
+        if let Some(snapshot_info) = crate::download::SnapshotInfo::for_network(&network) {
+            let snapshot_path = snapshot_dir.join(snapshot_info.filename);
+            if !snapshot_path.exists() {
+                anyhow::bail!(
+                    "Missing required snapshot file for network {}: {}\n
+This can be downloaded with `benchkit snapshot download {}`",
+                    bench.network,
+                    snapshot_path.display(),
+                    bench.network
+                );
+            }
+        }
+
+        Ok(())
     }
 
     async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         println!("Running benchmark: {:?}", bench);
-
         // First read the global.commits field and expand commit hashes
         let mut full_commits = Vec::new();
         for commit in &self.bench_config.global.commits {

@@ -5,6 +5,9 @@ home_dir: $HOME/.local/state/benchkit
 # The directory intermediate built binaries will be saved to.
 bin_dir: $HOME/.local/state/benchkit/binaries
 
+# The directory contain assumeutxo snapshots
+snapshot_dir: $HOME/.local/state/benchkit/snapshots
+
 # Database configuration
 database:
 
