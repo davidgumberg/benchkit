@@ -23,7 +23,7 @@ global:
 
   # Commits to build binaries from (required).
   # A list of one or more all found in <branch>
-  commits: ["HEAD", "HEAD~1"]
+  commits: ["62bd1960fdf", "e932c6168b5"]
 
 # Local benchmark config.
 benchmarks:

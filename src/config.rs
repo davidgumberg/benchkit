@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 
+use shellexpand;
+
 use crate::database::DatabaseConfig;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -9,6 +11,12 @@ pub struct AppConfig {
     pub home_dir: PathBuf,
     pub bin_dir: PathBuf,
     pub database: DatabaseConfig,
+}
+
+fn expand_path(path: &str) -> String {
+    shellexpand::full(path)
+        .unwrap_or_else(|_| path.into())
+        .into_owned()
 }
 
 pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
@@ -25,6 +33,12 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
 
     let mut config: AppConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {:?}", app_config_path))?;
+
+    // First expand any environment variables in the source path
+    let expanded_home = expand_path(config.home_dir.to_str().unwrap_or(""));
+    config.home_dir = PathBuf::from(expanded_home);
+    let expanded_bin_dir = expand_path(config.bin_dir.to_str().unwrap_or(""));
+    config.bin_dir = PathBuf::from(expanded_bin_dir);
 
     // Resolve relative paths to absolute paths and create directories
     for path in [&mut config.home_dir, &mut config.bin_dir].iter_mut() {
