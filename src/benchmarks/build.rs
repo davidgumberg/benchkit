@@ -11,6 +11,7 @@ pub struct Builder {
 }
 
 impl Builder {
+    // Change the signature to take references
     pub fn new(app_config: &AppConfig, bench_config: &BenchmarkConfig) -> Result<Self> {
         if !bench_config.global.source.exists() {
             anyhow::bail!(
@@ -44,14 +45,12 @@ impl Builder {
             full_commits.push(full_hash);
         }
 
-        // Update config with resolved full commit hashes
-        let mut config = bench_config;
-        config.global.commits = full_commits;
-
-        std::fs::create_dir_all(&app_config.bin_dir)?;
+        // Clone the configs and update commits
+        let mut bench_config = bench_config.clone();
+        bench_config.global.commits = full_commits;
 
         Ok(Self {
-            app_config,
+            app_config: app_config.clone(),
             bench_config,
         })
     }

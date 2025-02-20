@@ -3,7 +3,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GlobalConfig {
     pub hyperfine: Option<HashMap<String, Value>>,
     pub wrapper: Option<String>,
@@ -12,14 +12,14 @@ pub struct GlobalConfig {
     pub commits: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct SingleConfig {
     pub name: String,
     pub env: Option<HashMap<String, String>>,
     pub hyperfine: HashMap<String, Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct BenchmarkConfig {
     pub global: GlobalConfig,
     pub benchmarks: Vec<SingleConfig>,

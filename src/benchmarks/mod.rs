@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
-use std::{collections::HashMap, path::PathBuf};
 
 mod build;
 pub use build::Builder;
@@ -10,7 +10,7 @@ mod config;
 pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
 
 pub struct Runner {
-    config: BenchmarkConfig,
+    bench_config: BenchmarkConfig,
     database_url: String,
     pull_request_number: Option<i32>,
     run_id: Option<i32>,
@@ -18,15 +18,13 @@ pub struct Runner {
 
 impl Runner {
     pub fn new(
-        config_path: &PathBuf,
+        bench_config: &BenchmarkConfig,
         database_url: &str,
         pull_request_number: Option<i32>,
         run_id: Option<i32>,
     ) -> Result<Self> {
-        let config = config::load_bench_config(config_path)?;
-
         Ok(Self {
-            config,
+            bench_config: bench_config.clone(),
             database_url: database_url.to_string(),
             pull_request_number,
             run_id,
@@ -34,7 +32,7 @@ impl Runner {
     }
 
     pub async fn run(&self) -> Result<()> {
-        for bench in &self.config.benchmarks {
+        for bench in &self.bench_config.benchmarks {
             self.run_benchmark(bench).await?;
         }
         Ok(())
@@ -42,7 +40,7 @@ impl Runner {
 
     pub async fn run_single(&self, name: &str) -> Result<()> {
         let bench = self
-            .config
+            .bench_config
             .benchmarks
             .iter()
             .find(|b| b.name == name)
@@ -56,7 +54,7 @@ impl Runner {
 
         // First merge the hyperfine options
         let mut merged_hyperfine = HashMap::new();
-        if let Some(global_opts) = &self.config.global.hyperfine {
+        if let Some(global_opts) = &self.bench_config.global.hyperfine {
             merged_hyperfine.extend(global_opts.clone());
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
@@ -132,7 +130,7 @@ impl Runner {
         let command_str;
 
         if let Some(Value::String(command)) = options.get("command") {
-            command_str = if let Some(wrapper) = &self.config.global.wrapper {
+            command_str = if let Some(wrapper) = &self.bench_config.global.wrapper {
                 format!("{} {}", wrapper, command)
             } else {
                 command.clone()

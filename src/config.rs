@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::database::DatabaseConfig;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub home_dir: PathBuf,
     pub bin_dir: PathBuf,
@@ -26,15 +26,24 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
     let mut config: AppConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {:?}", app_config_path))?;
 
-    // Resolve relative paths to absolute paths
+    // Resolve relative paths to absolute paths and create directories
     for path in [&mut config.home_dir, &mut config.bin_dir].iter_mut() {
-        if !path.is_absolute() {
-            **path = config_dir
-                .join(&path)
-                .canonicalize()
-                .with_context(|| format!("Failed to resolve path: {:?}", path))?;
-        }
+        let abs_path = if path.is_absolute() {
+            path.clone()
+        } else {
+            config_dir.join(&path)
+        };
+
+        // Create directory and all parent directories
+        std::fs::create_dir_all(&abs_path)
+            .with_context(|| format!("Failed to create directory: {:?}", abs_path))?;
+
+        // Now we can safely canonicalize
+        **path = abs_path
+            .canonicalize()
+            .with_context(|| format!("Failed to resolve path: {:?}", abs_path))?;
     }
+
     println!("Using app configuration\n{:?}", config);
     Ok(config)
 }

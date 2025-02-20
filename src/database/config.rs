@@ -4,7 +4,7 @@ use std::process::Command;
 use tokio::time::{timeout, Duration};
 use tokio_postgres::NoTls;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseConfig {
     pub host: String,
     pub port: usize,

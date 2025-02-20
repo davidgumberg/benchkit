@@ -15,10 +15,10 @@ database:
   port: 5432
 
   # database name
-  name: benchmarks,
+  database: benchmarks
 
   # postgres username
   user: benchkit
 
   # postgres password
-  password: benchcoin,
+  password: benchcoin

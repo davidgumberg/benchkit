@@ -16,7 +16,7 @@ global:
 
   # Path to source code (required).
   # Can point to a local or online fork of bitcoin/bitcoin.
-  source: /home/will/src/core/bitcoin
+  source: $HOME/src/core/bitcoin
 
   # Which branch of the source to check out (required).
   branch: benchmark-test

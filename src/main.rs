@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use benchkit::{
-    benchmarks::{self, BenchmarkConfig},
+    benchmarks::{self, load_bench_config, BenchmarkConfig},
     config::{load_app_config, AppConfig},
     database::{self, DatabaseConfig},
     system::SystemChecker,
@@ -9,12 +9,11 @@ use clap::{Parser, Subcommand};
 use std::{
     io::{self},
     path::PathBuf,
-    str::FromStr,
+    process,
 };
-use tokio::process;
 
-const DEFAULT_CONFIG: PathBuf = PathBuf::from_str("config.yml");
-const DEFAULT_BENCH_CONFIG: PathBuf = PathBuf::from_str("benchmark.yml");
+const DEFAULT_CONFIG: &str = "config.yml";
+const DEFAULT_BENCH_CONFIG: &str = "benchmark.yml";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -28,7 +27,7 @@ struct Cli {
 
     /// Application config
     #[arg(short, long, default_value = DEFAULT_CONFIG)]
-    config: PathBuf,
+    app_config: PathBuf,
 
     /// Benchmark config
     #[arg(short, long, default_value = DEFAULT_BENCH_CONFIG)]
@@ -103,29 +102,26 @@ enum SystemCommands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Run system commands without any configuration
-    match &cli.command {
-        Commands::System { command } => {
-            let checker = SystemChecker::new()?;
-            match command {
-                SystemCommands::Check => checker.run_checks()?,
-                SystemCommands::Tune => checker.tune()?,
-                SystemCommands::Reset => checker.reset()?,
-            }
-            process::exit(0);
+    // Run system commands without loading any configuration
+    if let Commands::System { command } = &cli.command {
+        let checker = SystemChecker::new()?;
+        match command {
+            SystemCommands::Check => checker.run_checks()?,
+            SystemCommands::Tune => checker.tune()?,
+            SystemCommands::Reset => checker.reset()?,
         }
-        _ => {}
+        process::exit(0);
     }
 
-    let app_config: AppConfig = load_app_config(&cli.app_config);
+    let app_config: AppConfig = load_app_config(&cli.app_config)?;
+    let bench_config: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
     let db_config: &DatabaseConfig = &app_config.database;
-    let bench_config: BenchmarkConfig = load_bench_config(&cli.bench_config);
 
     match &cli.command {
         Commands::Db { command } => match command {
             DbCommands::Init => {
                 println!("Initializing database...");
-                database::initialize_database(&db_config).await?;
+                database::initialize_database(db_config).await?;
             }
             DbCommands::Test => {
                 database::check_connection(&db_config.connection_string()).await?;
@@ -143,35 +139,28 @@ async fn main() -> Result<()> {
 
                 if input.trim().to_lowercase() == "yes" {
                     println!("Deleting database...");
-                    database::delete_database(&db_config).await?;
+                    database::delete_database(db_config).await?;
                     println!("Database and user deleted successfully.");
                 } else {
                     bail!("Database deletion cancelled.");
                 }
             }
         },
-        Commands::Build {
-            app_config,
-            benchmark_config,
-        } => {
-            let builder = benchmarks::Builder::new(app_config, benchmark_config)?;
+        Commands::Build {} => {
+            let builder = benchmarks::Builder::new(&app_config, &bench_config)?;
             builder.build()?;
         }
         Commands::Run { command } => {
+            database::check_connection(&db_config.connection_string()).await?;
+            // First we will build the binaries
+            // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
+            // same commit binary twice?
+            let builder = benchmarks::Builder::new(&app_config, &bench_config)?;
+            builder.build()?;
             match command {
-                RunCommands::All {
-                    config,
-                    pr_number,
-                    run_id,
-                } => {
-                    database::check_connection(&db_config.connection_string()).await?;
-                    // First we will build the binaries
-                    // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
-                    // same commit binary twice?
-                    let builder = benchmarks::Builder::new(config)?;
-                    builder.build()?;
+                RunCommands::All { pr_number, run_id } => {
                     let runner = benchmarks::Runner::new(
-                        config,
+                        &bench_config,
                         &db_config.connection_string(),
                         *pr_number,
                         *run_id,
@@ -180,14 +169,12 @@ async fn main() -> Result<()> {
                     println!("All benchmarks completed successfully.");
                 }
                 RunCommands::Single {
-                    config,
                     name,
                     pr_number,
                     run_id,
                 } => {
-                    database::check_connection(&db_config.connection_string()).await?;
                     let runner = benchmarks::Runner::new(
-                        config,
+                        &bench_config,
                         &db_config.connection_string(),
                         *pr_number,
                         *run_id,
@@ -202,18 +189,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-// impl From<&Cli> for benchkit::benchmarks::BenchmarkConfig {
-//     fn from(cli: &Cli) -> Self {
-//         match &cli.command {
-//             Commands::Build { config } | Commands::Run { command } => {
-//                 let config_path = match command {
-//                     RunCommands::All { config, .. } | RunCommands::Single { config, .. } => config,
-//                 };
-//                 benchkit::benchmarks::config::load_config(config_path)
-//                     .expect("Failed to load config")
-//             }
-//             _ => Default::default(),
-//         }
-//     }
-// }
