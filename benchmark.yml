@@ -9,7 +9,7 @@ global:
     runs: 5
     export_json: results.json
     shell: /bin/bash
-    show_output: true
+    show_output: false
 
   # A command to wrap the hyperfine command.
   wrapper: "taskset -c 1-14"
@@ -25,6 +25,9 @@ global:
   # A list of one or more all found in <branch>
   commits: ["62bd1960fdf", "e932c6168b5"]
 
+  # A temporary datadir for Bitcoin Core to use
+  tmp_data_dir: /tmp/benchkit
+
 # Local benchmark config.
 benchmarks:
 
@@ -39,21 +42,22 @@ benchmarks:
     # Uses regular hyperfine syntax.
     hyperfine:
 
-      # {dbcache} will come from <parameter_lists> and be parameterised.
+      # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
+      # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} --version"
-
-      # TODO: Remove these and handle in benchkit.
-      # setup: "./scripts/example-setup.sh"
-      # prepare: "./scripts/example-prepare.sh"
-      # conclude: "./scripts/example-conclude.sh"
-      # cleanup: "./scripts/example-cleanup.sh"
-
       warmup: 5
       runs: 10
+
+      # These have "sane" defaults in benchkit, but can point to any command or script too
+      # setup:
+      # conclude:
+      # prepare:
+      # cleanup:
 
       # A list of zero or more parameters.
       # These will be tried as a matrix.
       parameter_lists:
+
         # The variable name to use in hyperfine command substitution.
         - var: dbcache
           # A list of values to substitute in.

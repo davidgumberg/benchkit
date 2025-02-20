@@ -27,7 +27,7 @@ pub async fn store_results(
     bench_name: &str,
     result_json: &str,
     pull_request_number: Option<i32>,
-    run_id: Option<i32>,
+    run_id: i32,
 ) -> Result<()> {
     let (client, connection) = timeout(
         Duration::from_secs(5),
@@ -58,7 +58,7 @@ async fn store_benchmark_result(
     bench_name: &str,
     result: &BenchmarkResult,
     pull_request_number: Option<i32>,
-    run_id: Option<i32>,
+    run_id: i32,
 ) -> Result<()> {
     let benchmark_id =
         insert_benchmark(client, bench_name, result, pull_request_number, run_id).await?;
@@ -73,7 +73,7 @@ async fn insert_benchmark(
     bench_name: &str,
     result: &BenchmarkResult,
     pull_request_number: Option<i32>,
-    run_id: Option<i32>,
+    run_id: i32,
 ) -> Result<i32> {
     let benchmark_id: i32 = timeout(
         Duration::from_secs(5),

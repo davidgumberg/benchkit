@@ -8,6 +8,8 @@ mod build;
 pub use build::Builder;
 mod config;
 pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
+mod hooks;
+use hooks::HookManager;
 
 use crate::config::AppConfig;
 
@@ -16,10 +18,16 @@ pub struct Runner {
     bench_config: BenchmarkConfig,
     database_url: String,
     pull_request_number: Option<i32>,
-    run_id: Option<i32>,
+    run_id: i32,
 }
 
 impl Runner {
+    fn generate_run_id() -> i32 {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        rng.random_range(100_000_000..999_999_999)
+    }
+
     pub fn new(
         app_config: &AppConfig,
         bench_config: &BenchmarkConfig,
@@ -27,6 +35,9 @@ impl Runner {
         pull_request_number: Option<i32>,
         run_id: Option<i32>,
     ) -> Result<Self> {
+        let run_id = run_id.unwrap_or_else(Self::generate_run_id);
+        println!("No run_id specified. Generated random run_id: {}", run_id);
+
         Ok(Self {
             app_config: app_config.clone(),
             bench_config: bench_config.clone(),
@@ -106,18 +117,26 @@ impl Runner {
             }
         }
 
-        // Update command to use full binary path
+        // Update command to use full binary path and apply chain= param
         if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
             let new_command = command.replace(
                 "bitcoind",
                 &format!(
-                    "{}/bitcoind-{{commit}} -chain={}",
+                    "{}/bitcoind-{{commit}} -chain={} -datadir={}",
                     self.app_config.bin_dir.display(),
-                    bench.network
+                    bench.network,
+                    self.bench_config.global.tmp_data_dir.display(),
                 ),
             );
             *command = new_command;
         }
+
+        // Add default hooks if not present
+        let hook_manager =
+            HookManager::new_from_current().with_context(|| "Failed to initialize hook manager")?;
+        hook_manager
+            .add_default_hooks(&mut merged_hyperfine)
+            .with_context(|| "Failed to add default hooks")?;
 
         // Get the export path before running hyperfine
         let export_path = merged_hyperfine
@@ -188,6 +207,11 @@ impl Runner {
     ) -> Result<Command> {
         let mut cmd = Command::new("hyperfine");
         let command_str;
+
+        // // Add hook script paths to command
+        // for (name, path) in script_manager.get_script_paths() {
+        //     cmd.arg(format!("--{}", name)).arg(path);
+        // }
 
         if let Some(Value::String(command)) = options.get("command") {
             command_str = if let Some(wrapper) = &self.bench_config.global.wrapper {

@@ -11,6 +11,7 @@ pub struct GlobalConfig {
     pub source: PathBuf,
     pub branch: String,
     pub commits: Vec<String>,
+    pub tmp_data_dir: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -48,19 +49,31 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
     let mut config: BenchmarkConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {:?}", bench_config_path))?;
 
-    // First expand any environment variables in the source path
-    let expanded_source = expand_path(config.global.source.to_str().unwrap_or(""));
-    config.global.source = PathBuf::from(expanded_source);
+    // Helper closure to process paths
+    let process_path = |path: &mut PathBuf, is_tmp: bool| -> Result<()> {
+        // Expand environment variables
+        *path = PathBuf::from(expand_path(path.to_str().unwrap()));
 
-    // Then resolve relative paths to absolute paths
-    if !config.global.source.is_absolute() {
-        config.global.source = config_dir
-            .join(&config.global.source)
-            .canonicalize()
-            .with_context(|| {
-                format!("Failed to resolve source path: {:?}", config.global.source)
-            })?;
-    }
+        // Convert to absolute path if relative
+        if !path.is_absolute() {
+            *path = config_dir.join(&path);
+        }
+
+        // For tmp_data_dir, create if not exists. For source, verify it exists
+        if is_tmp {
+            std::fs::create_dir_all(&path)
+                .with_context(|| format!("Failed to create directory: {:?}", path))?;
+        } else {
+            path.canonicalize()
+                .with_context(|| format!("Failed to resolve path: {:?}", path))?;
+        }
+
+        Ok(())
+    };
+
+    // Process both paths
+    process_path(&mut config.global.source, false)?;
+    process_path(&mut config.global.tmp_data_dir, true)?;
 
     println!("Using configuration\n{:?}", config);
     Ok(config)

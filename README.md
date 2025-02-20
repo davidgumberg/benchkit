@@ -144,9 +144,14 @@ benchmarks:
       # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
       # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} --version"
-
       warmup: 5
       runs: 10
+
+      # These have "sane" defaults in benchkit, but can point to any command or script too
+      # setup:
+      # conclude:
+      # prepare:
+      # cleanup:
 
       # A list of zero or more parameters.
       # These will be tried as a matrix.
@@ -163,7 +168,6 @@ benchmarks:
 
 Contributions are welcome! Please ensure your code:
 - Updates documentation as needed
-- Includes appropriate tests
 - Follows the project's code style
 
 ## License
