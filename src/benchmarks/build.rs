@@ -55,11 +55,27 @@ impl Builder {
         })
     }
 
+    fn binary_exists(&self, commit: &str) -> bool {
+        let binary_path = self.app_config.bin_dir.join(format!("bitcoind-{}", commit));
+        if binary_path.exists() {
+            println!(
+                "Binary already exists for commit {}, skipping build",
+                commit
+            );
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn build(&self) -> Result<()> {
         let initial_ref = self.get_initial_ref()?;
 
         for commit in &self.bench_config.global.commits {
-            self.build_commit(commit)?;
+            if !self.binary_exists(commit) {
+                println!("Building binary for commit {}", commit);
+                self.build_commit(commit)?;
+            }
         }
 
         self.restore_git_state(&initial_ref)?;

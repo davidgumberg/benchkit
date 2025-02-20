@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use benchkit::{
     benchmarks::{self, load_bench_config, BenchmarkConfig},
     config::{load_app_config, AppConfig},
@@ -6,11 +6,7 @@ use benchkit::{
     system::SystemChecker,
 };
 use clap::{Parser, Subcommand};
-use std::{
-    io::{self},
-    path::PathBuf,
-    process,
-};
+use std::{path::PathBuf, process};
 
 const DEFAULT_CONFIG: &str = "config.yml";
 const DEFAULT_BENCH_CONFIG: &str = "benchmark.yml";
@@ -69,20 +65,25 @@ enum DbCommands {
 enum RunCommands {
     /// Run all benchmarks found in config yml
     All {
+        /// Pull request associated with this run
         #[arg(long)]
         pr_number: Option<i32>,
 
+        /// Run ID associated with this run
         #[arg(long)]
         run_id: Option<i32>,
     },
     /// Run a single benchmark from config yml
     Single {
+        /// Benchmark name to run (single only)
         #[arg(short, long)]
         name: String,
 
+        /// Pull request associated with this run
         #[arg(long)]
         pr_number: Option<i32>,
 
+        /// Run ID associated with this run
         #[arg(long)]
         run_id: Option<i32>,
     },
@@ -92,9 +93,9 @@ enum RunCommands {
 enum SystemCommands {
     /// Check current system configuration
     Check,
-    /// Tune the system for benchmarking
+    /// Tune the system for benchmarking (requires sudo)
     Tune,
-    /// Reset benchmarking tune
+    /// Reset a previous tune
     Reset,
 }
 
@@ -120,30 +121,13 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Db { command } => match command {
             DbCommands::Init => {
-                println!("Initializing database...");
                 database::initialize_database(db_config).await?;
             }
             DbCommands::Test => {
                 database::check_connection(&db_config.connection_string()).await?;
-                println!("Successfully connected to database");
             }
             DbCommands::Delete => {
-                println!("⚠️  WARNING: You are about to delete:");
-                println!("  Database: {}", db_config.database);
-                println!("  User: {}", db_config.user);
-                println!("  Host: {}:{}", db_config.host, db_config.port);
-                println!("\nAre you sure? Type 'yes' to confirm: ");
-
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
-
-                if input.trim().to_lowercase() == "yes" {
-                    println!("Deleting database...");
-                    database::delete_database(db_config).await?;
-                    println!("Database and user deleted successfully.");
-                } else {
-                    bail!("Database deletion cancelled.");
-                }
+                database::delete_database_interactive(db_config).await?;
             }
         },
         Commands::Build {} => {
@@ -152,9 +136,6 @@ async fn main() -> Result<()> {
         }
         Commands::Run { command } => {
             database::check_connection(&db_config.connection_string()).await?;
-            // First we will build the binaries
-            // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
-            // same commit binary twice?
             let builder = benchmarks::Builder::new(&app_config, &bench_config)?;
             builder.build()?;
             match command {

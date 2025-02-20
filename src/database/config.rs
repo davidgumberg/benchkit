@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use std::process::Command;
+use std::{io, process::Command};
 use tokio::time::{timeout, Duration};
 use tokio_postgres::NoTls;
 
@@ -23,6 +23,7 @@ impl DatabaseConfig {
 }
 
 pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
+    println!("Initializing database...");
     check_postgres_running()?;
 
     let user_exists = check_postgres_user(&db_conf.user)?;
@@ -185,7 +186,26 @@ fn grant_privileges(database: &str, user: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn delete_database(config: &DatabaseConfig) -> Result<()> {
+pub async fn delete_database_interactive(db_config: &DatabaseConfig) -> Result<()> {
+    println!("⚠️  WARNING: You are about to delete:");
+    println!("  Database: {}", db_config.database);
+    println!("  User: {}", db_config.user);
+    println!("  Host: {}:{}", db_config.host, db_config.port);
+    println!("\nAre you sure? Type 'yes' to confirm: ");
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if input.trim().to_lowercase() == "yes" {
+        delete_database(db_config).await?;
+    } else {
+        bail!("Database deletion cancelled.");
+    }
+    Ok(())
+}
+
+async fn delete_database(config: &DatabaseConfig) -> Result<()> {
+    println!("Deleting database...");
     check_postgres_running()?;
 
     if check_postgres_database(&config.database)? {
@@ -201,8 +221,7 @@ pub async fn delete_database(config: &DatabaseConfig) -> Result<()> {
     } else {
         println!("User {} does not exist", config.user);
     }
-
-    println!("Cleanup completed successfully");
+    println!("Database and user deleted successfully.");
     Ok(())
 }
 
@@ -270,7 +289,7 @@ pub async fn check_connection(conn_string: &str) -> Result<()> {
         .await
         .with_context(|| "Database query timeout")?
         .with_context(|| "Failed to execute test query")?;
-    println!("Database connection OK");
+    println!("Successfully connected to database");
 
     Ok(())
 }
