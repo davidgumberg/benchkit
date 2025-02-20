@@ -17,6 +17,7 @@ pub struct GlobalConfig {
 pub struct SingleConfig {
     pub name: String,
     pub env: Option<HashMap<String, String>>,
+    pub network: String,
     pub hyperfine: HashMap<String, Value>,
 }
 

@@ -110,7 +110,11 @@ impl Runner {
         if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
             let new_command = command.replace(
                 "bitcoind",
-                &format!("{}/bitcoind-{{commit}}", self.app_config.bin_dir.display()),
+                &format!(
+                    "{}/bitcoind-{{commit}} -chain={}",
+                    self.app_config.bin_dir.display(),
+                    bench.network
+                ),
             );
             *command = new_command;
         }

@@ -1,9 +1,9 @@
 ---
-# Global options.
+# Global benchmarking options.
 global:
 
   # Global hyperfine option defaults.
-  # Will be overwritten by local options.
+  # Will be overwritten by local options specified per-benchmark.
   hyperfine:
     warmup: 1
     runs: 5
@@ -30,6 +30,9 @@ benchmarks:
 
   # benchmark name (required).
   - name: "Check bitcoind version"
+
+    # Bitcoin network to run on (main, test, testnet4, signet, regtest)
+    network: signet
 
     # Local hyperfine options.
     # These override global hyperfine options in case of conflict.
