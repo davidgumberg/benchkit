@@ -1,10 +1,20 @@
 use anyhow::{bail, Result};
-use benchkit::{benchmarks, database, system::SystemChecker};
+use benchkit::{
+    benchmarks::{self, BenchmarkConfig},
+    config::{load_app_config, AppConfig},
+    database::{self, DatabaseConfig},
+    system::SystemChecker,
+};
 use clap::{Parser, Subcommand};
 use std::{
     io::{self},
     path::PathBuf,
+    str::FromStr,
 };
+use tokio::process;
+
+const DEFAULT_CONFIG: PathBuf = PathBuf::from_str("config.yml");
+const DEFAULT_BENCH_CONFIG: PathBuf = PathBuf::from_str("benchmark.yml");
 
 #[derive(Parser, Debug)]
 #[command(
@@ -16,23 +26,13 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    #[arg(long, env = "PGHOST", default_value = "localhost")]
-    pg_host: String,
+    /// Application config
+    #[arg(short, long, default_value = DEFAULT_CONFIG)]
+    config: PathBuf,
 
-    #[arg(long, env = "PGPORT", default_value = "5432")]
-    pg_port: u16,
-
-    #[arg(long, env = "PGDATABASE", default_value = "benchmarks")]
-    pg_database: String,
-
-    #[arg(long, env = "PGUSER", default_value = "benchkit")]
-    pg_user: String,
-
-    #[arg(long, env = "PGPASSWORD", default_value = "benchcoin")]
-    pg_password: String,
-
-    #[arg(long, env = "BENCHCOIN_HOME", help = "Path to benchkit home directory")]
-    home_dir: Option<PathBuf>,
+    /// Benchmark config
+    #[arg(short, long, default_value = DEFAULT_BENCH_CONFIG)]
+    bench_config: PathBuf,
 }
 
 #[derive(Subcommand, Debug)]
@@ -43,11 +43,7 @@ enum Commands {
         command: DbCommands,
     },
     /// Build bitcoin core binaries using guix
-    Build {
-        /// Benchmark config
-        #[arg(short, long, default_value = "benchmark.yml")]
-        config: PathBuf,
-    },
+    Build {},
     /// Run benchmarks
     Run {
         #[command(subcommand)]
@@ -74,9 +70,6 @@ enum DbCommands {
 enum RunCommands {
     /// Run all benchmarks found in config yml
     All {
-        #[arg(short, long, default_value = "benchmark.yml")]
-        config: PathBuf,
-
         #[arg(long)]
         pr_number: Option<i32>,
 
@@ -85,9 +78,6 @@ enum RunCommands {
     },
     /// Run a single benchmark from config yml
     Single {
-        #[arg(short, long, default_value = "benchmark.yml")]
-        config: PathBuf,
-
         #[arg(short, long)]
         name: String,
 
@@ -109,26 +99,27 @@ enum SystemCommands {
     Reset,
 }
 
-impl From<&Cli> for database::DatabaseConfig {
-    fn from(cli: &Cli) -> Self {
-        database::DatabaseConfig {
-            host: cli.pg_host.clone(),
-            port: cli.pg_port,
-            database: cli.pg_database.clone(),
-            user: cli.pg_user.clone(),
-            password: cli.pg_password.clone(),
-        }
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let db_config = database::DatabaseConfig::from(&cli);
-    let home_config = benchkit::home::HomeConfig::from_option(cli.home_dir.as_deref());
-    home_config.initialize()?;
-    println!("Using home directory: {:?}", home_config.home_dir);
-    println!("Using binaries_dir: {:?}", home_config.binaries_dir);
+
+    // Run system commands without any configuration
+    match &cli.command {
+        Commands::System { command } => {
+            let checker = SystemChecker::new()?;
+            match command {
+                SystemCommands::Check => checker.run_checks()?,
+                SystemCommands::Tune => checker.tune()?,
+                SystemCommands::Reset => checker.reset()?,
+            }
+            process::exit(0);
+        }
+        _ => {}
+    }
+
+    let app_config: AppConfig = load_app_config(&cli.app_config);
+    let db_config: &DatabaseConfig = &app_config.database;
+    let bench_config: BenchmarkConfig = load_bench_config(&cli.bench_config);
 
     match &cli.command {
         Commands::Db { command } => match command {
@@ -159,57 +150,70 @@ async fn main() -> Result<()> {
                 }
             }
         },
-        Commands::Build { config } => {
-            let builder = benchmarks::Builder::new(config)?;
+        Commands::Build {
+            app_config,
+            benchmark_config,
+        } => {
+            let builder = benchmarks::Builder::new(app_config, benchmark_config)?;
             builder.build()?;
         }
-        Commands::Run { command } => match command {
-            RunCommands::All {
-                config,
-                pr_number,
-                run_id,
-            } => {
-                database::check_connection(&db_config.connection_string()).await?;
-                // First we will build the binaries
-                // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
-                // same commit binary twice?
-                let builder = benchmarks::Builder::new(config)?;
-                builder.build()?;
-                let runner = benchmarks::Runner::new(
-                    config,
-                    &db_config.connection_string(),
-                    *pr_number,
-                    *run_id,
-                )?;
-                runner.run().await?;
-                println!("All benchmarks completed successfully.");
-            }
-            RunCommands::Single {
-                config,
-                name,
-                pr_number,
-                run_id,
-            } => {
-                database::check_connection(&db_config.connection_string()).await?;
-                let runner = benchmarks::Runner::new(
-                    config,
-                    &db_config.connection_string(),
-                    *pr_number,
-                    *run_id,
-                )?;
-                runner.run_single(name).await?;
-                println!("Benchmark completed successfully.");
-            }
-        },
-        Commands::System { command } => {
-            let checker = SystemChecker::new()?;
+        Commands::Run { command } => {
             match command {
-                SystemCommands::Check => checker.run_checks()?,
-                SystemCommands::Tune => checker.tune()?,
-                SystemCommands::Reset => checker.reset()?,
+                RunCommands::All {
+                    config,
+                    pr_number,
+                    run_id,
+                } => {
+                    database::check_connection(&db_config.connection_string()).await?;
+                    // First we will build the binaries
+                    // TODO: is there a way we can check the binaries_dir first to avoid rebuilding the
+                    // same commit binary twice?
+                    let builder = benchmarks::Builder::new(config)?;
+                    builder.build()?;
+                    let runner = benchmarks::Runner::new(
+                        config,
+                        &db_config.connection_string(),
+                        *pr_number,
+                        *run_id,
+                    )?;
+                    runner.run().await?;
+                    println!("All benchmarks completed successfully.");
+                }
+                RunCommands::Single {
+                    config,
+                    name,
+                    pr_number,
+                    run_id,
+                } => {
+                    database::check_connection(&db_config.connection_string()).await?;
+                    let runner = benchmarks::Runner::new(
+                        config,
+                        &db_config.connection_string(),
+                        *pr_number,
+                        *run_id,
+                    )?;
+                    runner.run_single(name).await?;
+                    println!("Benchmark completed successfully.");
+                }
             }
         }
+        _ => {}
     }
 
     Ok(())
 }
+
+// impl From<&Cli> for benchkit::benchmarks::BenchmarkConfig {
+//     fn from(cli: &Cli) -> Self {
+//         match &cli.command {
+//             Commands::Build { config } | Commands::Run { command } => {
+//                 let config_path = match command {
+//                     RunCommands::All { config, .. } | RunCommands::Single { config, .. } => config,
+//                 };
+//                 benchkit::benchmarks::config::load_config(config_path)
+//                     .expect("Failed to load config")
+//             }
+//             _ => Default::default(),
+//         }
+//     }
+// }

@@ -25,9 +25,6 @@ global:
   # A list of one or more all found in <branch>
   commits: ["HEAD", "HEAD~1"]
 
-  # The directory built binaries will be copied to.
-  bin_dir: ./binaries
-
 # Local benchmark config.
 benchmarks:
 

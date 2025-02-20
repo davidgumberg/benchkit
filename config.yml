@@ -1,0 +1,24 @@
+---
+# Benchkit home directory
+home_dir: $HOME/.local/state/benchkit
+
+# The directory intermediate built binaries will be saved to.
+bin_dir: $HOME/.local/state/benchkit/binaries
+
+# Database configuration
+database:
+
+  # postgres host
+  host: localhost
+
+  # postgres port
+  port: 5432
+
+  # database name
+  name: benchmarks,
+
+  # postgres username
+  user: benchkit
+
+  # postgres password
+  password: benchcoin,

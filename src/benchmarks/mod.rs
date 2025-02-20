@@ -7,10 +7,10 @@ use std::{collections::HashMap, path::PathBuf};
 mod build;
 pub use build::Builder;
 mod config;
-pub use config::{BenchmarkConfig, Config, GlobalConfig};
+pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
 
 pub struct Runner {
-    config: Config,
+    config: BenchmarkConfig,
     database_url: String,
     pull_request_number: Option<i32>,
     run_id: Option<i32>,
@@ -23,7 +23,7 @@ impl Runner {
         pull_request_number: Option<i32>,
         run_id: Option<i32>,
     ) -> Result<Self> {
-        let config = config::load_config(config_path)?;
+        let config = config::load_bench_config(config_path)?;
 
         Ok(Self {
             config,
@@ -51,7 +51,7 @@ impl Runner {
         self.run_benchmark(bench).await
     }
 
-    async fn run_benchmark(&self, bench: &BenchmarkConfig) -> Result<()> {
+    async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         println!("Running benchmark: {:?}", bench);
 
         // First merge the hyperfine options
@@ -106,7 +106,7 @@ impl Runner {
 
     fn run_hyperfine(
         &self,
-        bench: &BenchmarkConfig,
+        bench: &SingleConfig,
         merged_opts: &HashMap<String, Value>,
     ) -> Result<()> {
         let mut cmd = self.build_hyperfine_command(bench, merged_opts)?;
@@ -125,7 +125,7 @@ impl Runner {
 
     fn build_hyperfine_command(
         &self,
-        bench: &BenchmarkConfig,
+        bench: &SingleConfig,
         options: &HashMap<String, Value>,
     ) -> Result<Command> {
         let mut cmd = Command::new("hyperfine");

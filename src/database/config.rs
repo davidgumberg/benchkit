@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::process::Command;
 use tokio::time::{timeout, Duration};
 use tokio_postgres::NoTls;
 
+#[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
     pub host: String,
-    pub port: u16,
+    pub port: usize,
     pub database: String,
     pub user: String,
     pub password: String,
@@ -20,24 +22,22 @@ impl DatabaseConfig {
     }
 }
 
-pub async fn initialize_database(config: &DatabaseConfig) -> Result<()> {
+pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
     check_postgres_running()?;
 
-    let user_exists = check_postgres_user(&config.user)?;
-    let db_exists = check_postgres_database(&config.database)?;
-
+    let user_exists = check_postgres_user(&db_conf.user)?;
     if !user_exists {
-        create_postgres_user(&config.user, &config.password)?;
+        create_postgres_user(&db_conf.user, &db_conf.password)?;
     }
+    ensure_user_createdb(&db_conf.user)?;
 
-    ensure_user_createdb(&config.user)?;
-
+    let db_exists = check_postgres_database(&db_conf.database)?;
     if !db_exists {
-        create_postgres_database(&config.database, &config.user)?;
-        grant_privileges(&config.database, &config.user)?;
+        create_postgres_database(&db_conf.database, &db_conf.user)?;
+        grant_privileges(&db_conf.database, &db_conf.user)?;
     }
 
-    let (client, connection) = tokio_postgres::connect(&config.connection_string(), NoTls)
+    let (client, connection) = tokio_postgres::connect(&db_conf.connection_string(), NoTls)
         .await
         .with_context(|| "Failed to connect to database")?;
 
