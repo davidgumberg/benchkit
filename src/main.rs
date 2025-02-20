@@ -141,6 +141,7 @@ async fn main() -> Result<()> {
             match command {
                 RunCommands::All { pr_number, run_id } => {
                     let runner = benchmarks::Runner::new(
+                        &app_config,
                         &bench_config,
                         &db_config.connection_string(),
                         *pr_number,
@@ -155,6 +156,7 @@ async fn main() -> Result<()> {
                     run_id,
                 } => {
                     let runner = benchmarks::Runner::new(
+                        &app_config,
                         &bench_config,
                         &db_config.connection_string(),
                         *pr_number,

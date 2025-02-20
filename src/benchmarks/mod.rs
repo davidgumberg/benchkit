@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
@@ -9,7 +9,10 @@ pub use build::Builder;
 mod config;
 pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
 
+use crate::config::AppConfig;
+
 pub struct Runner {
+    app_config: AppConfig,
     bench_config: BenchmarkConfig,
     database_url: String,
     pull_request_number: Option<i32>,
@@ -18,12 +21,14 @@ pub struct Runner {
 
 impl Runner {
     pub fn new(
+        app_config: &AppConfig,
         bench_config: &BenchmarkConfig,
         database_url: &str,
         pull_request_number: Option<i32>,
         run_id: Option<i32>,
     ) -> Result<Self> {
         Ok(Self {
+            app_config: app_config.clone(),
             bench_config: bench_config.clone(),
             database_url: database_url.to_string(),
             pull_request_number,
@@ -52,12 +57,63 @@ impl Runner {
     async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         println!("Running benchmark: {:?}", bench);
 
-        // First merge the hyperfine options
+        // First read the global.commits field and expand commit hashes
+        let mut full_commits = Vec::new();
+        for commit in &self.bench_config.global.commits {
+            let output = Command::new("git")
+                .current_dir(&self.bench_config.global.source)
+                .arg("rev-parse")
+                .arg(commit)
+                .output()
+                .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
+
+            if !output.status.success() {
+                anyhow::bail!("Failed to resolve commit hash '{}'", commit);
+            }
+
+            let full_hash = String::from_utf8(output.stdout)
+                .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
+                .trim()
+                .to_string();
+
+            println!("Resolved commit {} to full hash {}", commit, full_hash);
+            full_commits.push(full_hash);
+        }
+
+        // Merge hyperfine options from global and benchmark configs
         let mut merged_hyperfine = HashMap::new();
         if let Some(global_opts) = &self.bench_config.global.hyperfine {
             merged_hyperfine.extend(global_opts.clone());
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
+
+        // Add commits to parameter-lists if not already present
+        let param_lists = merged_hyperfine
+            .entry("parameter_lists".to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
+
+        if let Value::Array(lists) = param_lists {
+            // Check if commits parameter list already exists
+            if !lists
+                .iter()
+                .any(|list| (list.get("var").and_then(Value::as_str) == Some("commit")))
+            {
+                // Add commits parameter list
+                lists.push(json!({
+                    "var": "commit",
+                    "values": full_commits
+                }));
+            }
+        }
+
+        // Update command to use full binary path
+        if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
+            let new_command = command.replace(
+                "bitcoind",
+                &format!("{}/bitcoind-{{commit}}", self.app_config.bin_dir.display()),
+            );
+            *command = new_command;
+        }
 
         // Get the export path before running hyperfine
         let export_path = merged_hyperfine
