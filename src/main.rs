@@ -6,10 +6,15 @@ use benchkit::{
     system::SystemChecker,
 };
 use clap::{Parser, Subcommand};
+use futures::StreamExt;
+use object_store::aws::{AmazonS3, AmazonS3Builder};
+use object_store::ObjectStore;
 use std::{path::PathBuf, process};
 
 const DEFAULT_CONFIG: &str = "config.yml";
 const DEFAULT_BENCH_CONFIG: &str = "benchmark.yml";
+const BUCKET: &str = "benchcoin";
+const OBJECT_URL: &str = "https://hel1.your-objectstorage.com";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -49,6 +54,7 @@ enum Commands {
         #[command(subcommand)]
         command: SystemCommands,
     },
+    S3,
 }
 
 #[derive(Subcommand, Debug)]
@@ -167,7 +173,39 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Commands::S3 {} => {
+            // Create an S3 store pointing to Hetzner
+            let key_id = std::env::var("KEY_ID").unwrap();
+            let secret_key = std::env::var("SECRET_ACCESS_KEY").unwrap();
+            println!("Using:");
+            println!("  url: {OBJECT_URL}");
+            println!("  bucket: {BUCKET}");
+            println!("  key_id: {key_id}");
+            // println!("  secret_key: {secret_key}");
+            let store = AmazonS3Builder::new()
+                .with_bucket_name(BUCKET)
+                .with_access_key_id(key_id)
+                .with_secret_access_key(secret_key)
+                .with_endpoint(OBJECT_URL)
+                .build()?;
+            list_files(&store).await?;
+        }
         _ => {}
+    }
+
+    Ok(())
+}
+
+async fn list_files(store: &AmazonS3) -> anyhow::Result<()> {
+    let mut list_stream = store.list(None);
+
+    while let Some(meta) = list_stream.next().await {
+        match meta {
+            Ok(meta) => {
+                println!("Name: {}, Size: {} bytes", meta.location, meta.size);
+            }
+            Err(e) => eprintln!("Error listing object: {}", e),
+        }
     }
 
     Ok(())
