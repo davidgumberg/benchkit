@@ -6,7 +6,7 @@ use shellexpand;
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct GlobalConfig {
+pub struct BenchmarkGlobalConfig {
     pub hyperfine: Option<HashMap<String, Value>>,
     pub wrapper: Option<String>,
     pub source: PathBuf,
@@ -25,7 +25,7 @@ pub struct SingleConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct BenchmarkConfig {
-    pub global: GlobalConfig,
+    pub global: BenchmarkGlobalConfig,
     pub benchmarks: Vec<SingleConfig>,
 }
 

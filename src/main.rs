@@ -1,8 +1,8 @@
 use anyhow::Result;
 use benchkit::{
     benchmarks::{self, load_bench_config, BenchmarkConfig},
-    config::{load_app_config, AppConfig},
-    database::{self, DatabaseConfig},
+    config::{load_app_config, AppConfig, GlobalConfig},
+    database::{self},
     download::download_snapshot,
     system::SystemChecker,
     types::Network,
@@ -141,39 +141,33 @@ async fn main() -> Result<()> {
         process::exit(0);
     }
 
-    let app_config: AppConfig = load_app_config(&cli.app_config)?;
-    let bench_config: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
-    let db_config: &DatabaseConfig = &app_config.database;
+    let app: AppConfig = load_app_config(&cli.app_config)?;
+    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
+    let config = GlobalConfig { app, bench };
 
     match &cli.command {
         Commands::Db { command } => match command {
             DbCommands::Init => {
-                database::initialize_database(db_config).await?;
+                database::initialize_database(&config.app.database).await?;
             }
             DbCommands::Test => {
-                database::check_connection(&db_config.connection_string()).await?;
+                database::check_connection(&config.app.database).await?;
             }
             DbCommands::Delete => {
-                database::delete_database_interactive(db_config).await?;
+                database::delete_database_interactive(&config.app.database).await?;
             }
         },
         Commands::Build {} => {
-            let builder = benchmarks::Builder::new(&app_config, &bench_config)?;
+            let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
         }
         Commands::Run { command } => {
-            database::check_connection(&db_config.connection_string()).await?;
-            let builder = benchmarks::Builder::new(&app_config, &bench_config)?;
+            database::check_connection(&config.app.database).await?;
+            let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
             match command {
                 RunCommands::All { pr_number, run_id } => {
-                    let runner = benchmarks::Runner::new(
-                        &app_config,
-                        &bench_config,
-                        &db_config.connection_string(),
-                        *pr_number,
-                        *run_id,
-                    )?;
+                    let runner = benchmarks::Runner::new(config.clone(), *pr_number, *run_id)?;
                     runner.run().await?;
                     info!("All benchmarks completed successfully.");
                 }
@@ -182,13 +176,7 @@ async fn main() -> Result<()> {
                     pr_number,
                     run_id,
                 } => {
-                    let runner = benchmarks::Runner::new(
-                        &app_config,
-                        &bench_config,
-                        &db_config.connection_string(),
-                        *pr_number,
-                        *run_id,
-                    )?;
+                    let runner = benchmarks::Runner::new(config.clone(), *pr_number, *run_id)?;
                     runner.run_single(name).await?;
                     info!("Benchmark completed successfully.");
                 }
@@ -196,7 +184,7 @@ async fn main() -> Result<()> {
         }
         Commands::Snapshot { command } => match command {
             SnapshotCommands::Download { network } => {
-                download_snapshot(network, &app_config.snapshot_dir).await?;
+                download_snapshot(network, &config.app.snapshot_dir).await?;
             }
         },
         // Commands::S3 {} => {

@@ -7,7 +7,7 @@ use tokio_postgres::{Client, NoTls};
 struct BenchmarkResult {
     command: String,
     mean: f64,
-    stddev: f64,
+    stddev: Option<f64>,
     median: f64,
     user: f64,
     system: f64,

@@ -2,62 +2,25 @@ use anyhow::{Context, Result};
 use log::{debug, info, warn};
 use std::process::Command;
 
-use crate::config::AppConfig;
-
-use super::BenchmarkConfig;
+use crate::config::GlobalConfig;
 
 pub struct Builder {
-    app_config: AppConfig,
-    bench_config: BenchmarkConfig,
+    config: GlobalConfig,
 }
 
 impl Builder {
-    // Change the signature to take references
-    pub fn new(app_config: &AppConfig, bench_config: &BenchmarkConfig) -> Result<Self> {
-        if !bench_config.global.source.exists() {
+    pub fn new(config: GlobalConfig) -> Result<Self> {
+        if !config.bench.global.source.exists() {
             anyhow::bail!(
                 "Source directory does not exist: {}",
-                bench_config.global.source.display()
+                config.bench.global.source.display()
             );
         }
-
-        // Expand any short commit hashes or symbolic refs to full hashes
-        let mut full_commits = Vec::new();
-        for commit in &bench_config.global.commits {
-            let output = Command::new("git")
-                .current_dir(&bench_config.global.source)
-                .arg("rev-parse")
-                .arg(commit)
-                .output()
-                .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
-
-            if !output.status.success() {
-                anyhow::bail!("Failed to resolve commit hash '{}'", commit);
-            }
-
-            let full_hash = String::from_utf8(output.stdout)
-                .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
-                .trim()
-                .to_string();
-            debug!(
-                "Resolved config commit {} to full hash {}",
-                commit, full_hash
-            );
-            full_commits.push(full_hash);
-        }
-
-        // Clone the configs and update commits
-        let mut bench_config = bench_config.clone();
-        bench_config.global.commits = full_commits;
-
-        Ok(Self {
-            app_config: app_config.clone(),
-            bench_config,
-        })
+        Ok(Self { config })
     }
 
     fn binary_exists(&self, commit: &str) -> bool {
-        let binary_path = self.app_config.bin_dir.join(format!("bitcoind-{}", commit));
+        let binary_path = self.config.app.bin_dir.join(format!("bitcoind-{}", commit));
         if binary_path.exists() {
             info!(
                 "Binary already exists for commit {}, skipping build",
@@ -72,7 +35,7 @@ impl Builder {
     pub fn build(&self) -> Result<()> {
         let initial_ref = self.get_initial_ref()?;
 
-        for commit in &self.bench_config.global.commits {
+        for commit in &self.config.bench.global.commits {
             if !self.binary_exists(commit) {
                 info!("Building binary for commit {}", commit);
                 self.build_commit(commit)?;
@@ -85,7 +48,7 @@ impl Builder {
 
     fn get_initial_ref(&self) -> Result<String> {
         let output = Command::new("git")
-            .current_dir(&self.bench_config.global.source)
+            .current_dir(&self.config.bench.global.source)
             .arg("symbolic-ref")
             .arg("-q")
             .arg("HEAD")
@@ -95,7 +58,7 @@ impl Builder {
             Ok(String::from_utf8(output.stdout)?.trim().to_string())
         } else {
             let output = Command::new("git")
-                .current_dir(&self.bench_config.global.source)
+                .current_dir(&self.config.bench.global.source)
                 .arg("rev-parse")
                 .arg("HEAD")
                 .output()?;
@@ -118,7 +81,7 @@ impl Builder {
 
     fn checkout_commit(&self, commit: &str) -> Result<()> {
         let status = Command::new("git")
-            .current_dir(&self.bench_config.global.source)
+            .current_dir(&self.config.bench.global.source)
             .arg("checkout")
             .arg(commit)
             .status()
@@ -151,7 +114,7 @@ impl Builder {
 
             // First try with -3 for git-apply to attempt 3-way merge
             let status = Command::new("git")
-                .current_dir(&self.bench_config.global.source)
+                .current_dir(&self.config.bench.global.source)
                 .arg("apply")
                 .arg("-3")
                 .arg("--whitespace=fix")
@@ -164,7 +127,7 @@ impl Builder {
                 warn!("3-way merge failed for {}, attempting with --reject", patch);
 
                 let status = Command::new("git")
-                    .current_dir(&self.bench_config.global.source)
+                    .current_dir(&self.config.bench.global.source)
                     .arg("apply")
                     .arg("--reject")
                     .arg("--whitespace=fix")
@@ -180,7 +143,7 @@ impl Builder {
 
                 // Check for .rej files which indicate partial application
                 let output = Command::new("find")
-                    .current_dir(&self.bench_config.global.source)
+                    .current_dir(&self.config.bench.global.source)
                     .arg(".")
                     .arg("-name")
                     .arg("*.rej")
@@ -203,13 +166,36 @@ impl Builder {
         Ok(())
     }
 
+    fn get_full_commit(&self, commit: &str) -> Result<String> {
+        let output = Command::new("git")
+            .current_dir(&self.config.bench.global.source)
+            .arg("rev-parse")
+            .arg(commit)
+            .output()
+            .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
+
+        if !output.status.success() {
+            anyhow::bail!("Failed to resolve commit hash '{}'", commit);
+        }
+
+        let full_hash = String::from_utf8(output.stdout)
+            .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
+            .trim()
+            .to_string();
+        debug!(
+            "Resolved config commit {} to full hash {}",
+            commit, full_hash
+        );
+        Ok(String::from(&full_hash[..12]))
+    }
+
     fn run_build(&self, commit: &str) -> Result<()> {
-        let short_commit = &commit[..12];
+        let short_commit = self.get_full_commit(commit).unwrap();
 
         // Create base command depending on CI environment
         let mut cmd = if std::env::var("CI").is_ok() {
             let mut cmd = Command::new("taskset");
-            cmd.current_dir(&self.bench_config.global.source)
+            cmd.current_dir(&self.config.bench.global.source)
                 .arg("-c")
                 .arg("2-15")
                 .arg("chrt")
@@ -219,7 +205,7 @@ impl Builder {
             cmd
         } else {
             let mut cmd = Command::new("contrib/guix/guix-build");
-            cmd.current_dir(&self.bench_config.global.source);
+            cmd.current_dir(&self.config.bench.global.source);
             cmd
         };
 
@@ -242,13 +228,13 @@ impl Builder {
             anyhow::bail!("Build failed for commit {}", commit);
         }
 
-        let archive_path = self.bench_config.global.source.join(format!(
+        let archive_path = self.config.bench.global.source.join(format!(
             "guix-build-{}/output/x86_64-linux-gnu/bitcoin-{}-x86_64-linux-gnu.tar.gz",
             short_commit, short_commit
         ));
 
         let status = Command::new("tar")
-            .current_dir(&self.bench_config.global.source)
+            .current_dir(&self.config.bench.global.source)
             .arg("-xzf")
             .arg(&archive_path)
             .status()
@@ -259,7 +245,7 @@ impl Builder {
         }
 
         let status = Command::new("git")
-            .current_dir(&self.bench_config.global.source)
+            .current_dir(&self.config.bench.global.source)
             .arg("reset")
             .arg("--hard")
             .status()
@@ -273,19 +259,21 @@ impl Builder {
     }
 
     fn copy_binary(&self, commit: &str) -> Result<()> {
-        let short_commit = &commit[..12];
+        let short_commit = &self.get_full_commit(commit).unwrap()[..12];
         let src_path = self
-            .bench_config
+            .config
+            .bench
             .global
             .source
             .join(format!("bitcoin-{}/bin/bitcoind", short_commit));
-        let dest_path = self.app_config.bin_dir.join(format!("bitcoind-{}", commit));
+        let dest_path = self.config.app.bin_dir.join(format!("bitcoind-{}", commit));
 
         std::fs::copy(&src_path, &dest_path)
             .with_context(|| format!("Failed to copy binary for commit {}", commit))?;
 
         std::fs::remove_dir_all(
-            self.bench_config
+            self.config
+                .bench
                 .global
                 .source
                 .join(format!("bitcoin-{}", short_commit)),
@@ -297,7 +285,7 @@ impl Builder {
 
     fn restore_git_state(&self, initial_ref: &str) -> Result<()> {
         let status = Command::new("git")
-            .current_dir(&self.bench_config.global.source)
+            .current_dir(&self.config.bench.global.source)
             .arg("checkout")
             .arg(initial_ref)
             .status()

@@ -9,19 +9,17 @@ use std::process::Command;
 mod build;
 pub use build::Builder;
 mod config;
-pub use config::{load_bench_config, BenchmarkConfig, GlobalConfig, SingleConfig};
+pub use config::{load_bench_config, BenchmarkConfig, BenchmarkGlobalConfig, SingleConfig};
 mod hooks;
 use hooks::HookManager;
 // mod object_storage;
 // pub use object_storage::ObjectStorage;
 
-use crate::config::AppConfig;
+use crate::config::GlobalConfig;
 use crate::types::Network;
 
 pub struct Runner {
-    app_config: AppConfig,
-    bench_config: BenchmarkConfig,
-    database_url: String,
+    config: GlobalConfig,
     pull_request_number: Option<i32>,
     run_id: i32,
 }
@@ -34,9 +32,7 @@ impl Runner {
     }
 
     pub fn new(
-        app_config: &AppConfig,
-        bench_config: &BenchmarkConfig,
-        database_url: &str,
+        config: GlobalConfig,
         pull_request_number: Option<i32>,
         run_id: Option<i32>,
     ) -> Result<Self> {
@@ -44,17 +40,15 @@ impl Runner {
         warn!("No run_id specified. Generated random run_id: {}", run_id);
 
         Ok(Self {
-            app_config: app_config.clone(),
-            bench_config: bench_config.clone(),
-            database_url: database_url.to_string(),
+            config,
             pull_request_number,
             run_id,
         })
     }
 
     pub async fn run(&self) -> Result<()> {
-        for bench in &self.bench_config.benchmarks {
-            self.check_snapshot(bench, &self.app_config.snapshot_dir)
+        for bench in &self.config.bench.benchmarks {
+            self.check_snapshot(bench, &self.config.app.snapshot_dir)
                 .await?;
             self.run_benchmark(bench).await?;
         }
@@ -63,13 +57,14 @@ impl Runner {
 
     pub async fn run_single(&self, name: &str) -> Result<()> {
         let bench = self
-            .bench_config
+            .config
+            .bench
             .benchmarks
             .iter()
             .find(|b| b.name == name)
             .with_context(|| format!("Benchmark not found: {}", name))?;
 
-        self.check_snapshot(bench, &self.app_config.snapshot_dir)
+        self.check_snapshot(bench, &self.config.app.snapshot_dir)
             .await?;
         self.run_benchmark(bench).await
     }
@@ -100,31 +95,31 @@ This can be downloaded with `benchkit snapshot download {}`",
         info!("Running benchmark: {:?}", bench);
 
         // First read the global.commits field and expand commit hashes
-        let mut full_commits = Vec::new();
-        for commit in &self.bench_config.global.commits {
-            let output = Command::new("git")
-                .current_dir(&self.bench_config.global.source)
-                .arg("rev-parse")
-                .arg(commit)
-                .output()
-                .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
-
-            if !output.status.success() {
-                anyhow::bail!("Failed to resolve commit hash '{}'", commit);
-            }
-
-            let full_hash = String::from_utf8(output.stdout)
-                .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
-                .trim()
-                .to_string();
-
-            debug!("Resolved commit {} to full hash {}", commit, full_hash);
-            full_commits.push(full_hash);
-        }
+        // let mut full_commits = Vec::new();
+        // for commit in &self.config.bench.global.commits {
+        //     let output = Command::new("git")
+        //         .current_dir(&self.config.bench.global.source)
+        //         .arg("rev-parse")
+        //         .arg(commit)
+        //         .output()
+        //         .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
+        //
+        //     if !output.status.success() {
+        //         anyhow::bail!("Failed to resolve commit hash '{}'", commit);
+        //     }
+        //
+        //     let full_hash = String::from_utf8(output.stdout)
+        //         .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
+        //         .trim()
+        //         .to_string();
+        //
+        //     debug!("Resolved commit {} to full hash {}", commit, full_hash);
+        //     full_commits.push(full_hash);
+        // }
 
         // Merge hyperfine options from global and benchmark configs
         let mut merged_hyperfine = HashMap::new();
-        if let Some(global_opts) = &self.bench_config.global.hyperfine {
+        if let Some(global_opts) = &self.config.bench.global.hyperfine {
             merged_hyperfine.extend(global_opts.clone());
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
@@ -132,17 +127,31 @@ This can be downloaded with `benchkit snapshot download {}`",
         // Create a temporary output directory
         let out_dir = tempfile::TempDir::new()?.into_path();
 
-        // Add default hooks if not present
+        // Update command to use full binary path and apply chain= param
+        if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
+            let new_command = command.replace(
+                "bitcoind",
+                &format!(
+                    "{}/bitcoind-{{commit}} -chain={} -datadir={}",
+                    self.config.app.bin_dir.display(),
+                    bench.network,
+                    self.config.bench.global.tmp_data_dir.display(),
+                ),
+            );
+            *command = new_command;
+        }
+
+        // Add script hooks
         let hook_manager =
             HookManager::new().with_context(|| "Failed to initialize hook manager")?;
         hook_manager
             .add_script_hooks(
                 &mut merged_hyperfine,
                 &bench.network,
-                self.bench_config.global.tmp_data_dir.clone(),
+                self.config.bench.global.tmp_data_dir.clone(),
                 out_dir,
             )
-            .with_context(|| "Failed to add default hooks")?;
+            .with_context(|| "Failed to add hyperfine script hooks")?;
 
         // Add commits to parameter-lists if not already present
         let param_lists = merged_hyperfine
@@ -158,23 +167,10 @@ This can be downloaded with `benchkit snapshot download {}`",
                 // Add commits parameter list
                 lists.push(json!({
                     "var": "commit",
-                    "values": full_commits
+                    // "values": full_commits
+                    "values": self.config.bench.global.commits
                 }));
             }
-        }
-
-        // Update command to use full binary path and apply chain= param
-        if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
-            let new_command = command.replace(
-                "bitcoind",
-                &format!(
-                    "{}/bitcoind-{{commit}} -chain={} -datadir={}",
-                    self.app_config.bin_dir.display(),
-                    bench.network,
-                    self.bench_config.global.tmp_data_dir.display(),
-                ),
-            );
-            *command = new_command;
         }
 
         // Check the export path before running hyperfine
@@ -205,7 +201,7 @@ This can be downloaded with `benchkit snapshot download {}`",
 
         // Store results in database
         crate::database::store_results(
-            &self.database_url,
+            &self.config.app.database.connection_string(),
             &bench.name,
             &results_json,
             self.pull_request_number,
@@ -253,7 +249,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         // }
 
         if let Some(Value::String(command)) = options.get("command") {
-            command_str = if let Some(wrapper) = &self.bench_config.global.wrapper {
+            command_str = if let Some(wrapper) = &self.config.bench.global.wrapper {
                 format!("{} {}", wrapper, command)
             } else {
                 command.clone()

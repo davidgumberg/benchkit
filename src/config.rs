@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use shellexpand;
 
-use crate::database::DatabaseConfig;
+use crate::{benchmarks::BenchmarkConfig, database::DatabaseConfig};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
@@ -13,6 +13,12 @@ pub struct AppConfig {
     pub bin_dir: PathBuf,
     pub snapshot_dir: PathBuf,
     pub database: DatabaseConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GlobalConfig {
+    pub app: AppConfig,
+    pub bench: BenchmarkConfig,
 }
 
 fn expand_path(path: &str) -> String {

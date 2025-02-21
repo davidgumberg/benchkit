@@ -2,13 +2,13 @@
 # Exit on any error
 set -e
 
-# The first argument is alway the datadir
-# The second argument is always the run artifact dir
+# The first argument is the datadir
+# The second argument is the bitcoind
+# The third argument is 
 
 # Check if we have the required arguments
 if [ "$#" -ne 2 ]; then
     echo "Error: Required arguments missing"
-    echo "Usage: $0 <datadir> <artifact-dir>"
     exit 1
 fi
 
@@ -24,6 +24,20 @@ if [ ! -d "$2" ]; then
     exit 1
 fi
 
+
+# TMP_DATADIR="$1"
+# UTXO_PATH="$2"
+# CONNECT_ADDRESS="$3"
+# CHAIN="$4"
+# DBCACHE="$5"
+# commit="$6"
+# BINARIES_DIR="$7"
+
 # Clean datadir contents
 rm -Rf "${1:?}"/*
-exit 0
+
+# Use the pre-built binaries from BINARIES_DIR
+# "${BINARIES_DIR}/${commit}/bitcoind" --help
+# taskset -c 0-15 "${BINARIES_DIR}/${commit}/bitcoind" -datadir="${TMP_DATADIR}" -connect="${CONNECT_ADDRESS}" -daemon=0 -chain="${CHAIN}" -stopatheight=1 -printtoconsole=0
+# taskset -c 0-15 "${BINARIES_DIR}/${commit}/bitcoind" -datadir="${TMP_DATADIR}" -connect="${CONNECT_ADDRESS}" -daemon=0 -chain="${CHAIN}" -dbcache="${DBCACHE}" -pausebackgroundsync=1 -loadutxosnapshot="${UTXO_PATH}" -printtoconsole=0 || true
+# clean_logs "${TMP_DATADIR}"

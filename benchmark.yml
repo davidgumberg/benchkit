@@ -27,7 +27,7 @@ global:
 
   # Commits to build binaries from (required).
   # A list of one or more all found in <branch>
-  commits: ["62bd1960fdf", "e932c6168b5"]
+  commits: ["62bd1960fdf", "82f89cf41d5"]
 
   # A temporary datadir for Bitcoin Core to use
   tmp_data_dir: /tmp/benchkit
@@ -44,8 +44,9 @@ benchmarks:
     # These override global hyperfine options in case of conflict.
     # Uses regular hyperfine syntax.
     hyperfine:
-      # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
-      # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
+      # The correct binary for the [commit] will be substituted and the
+      # (bitcoin) [network] applied automatically. {dbcache} is an explicit
+      # (additional) parameterisation from [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} -stopatheight=1"
       warmup: 0
       runs: 1
@@ -57,4 +58,3 @@ benchmarks:
         - var: dbcache
           # A list of values to substitute in.
           values: ["450", "32000"]
-

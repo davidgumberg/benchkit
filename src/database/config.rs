@@ -275,8 +275,8 @@ fn drop_user(user: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn check_connection(conn_string: &str) -> Result<()> {
-    let (client, connection) = tokio_postgres::connect(conn_string, NoTls)
+pub async fn check_connection(db_conf: &DatabaseConfig) -> Result<()> {
+    let (client, connection) = tokio_postgres::connect(&db_conf.connection_string(), NoTls)
         .await
         .with_context(|| "Failed to establish database connection")?;
 
