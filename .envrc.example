@@ -1,0 +1,20 @@
+# Benchkit
+export PGHOST=127.0.0.1
+export PGPORT=5432
+export PGDATABASE=benchmarks
+export PGUSER=benchkit
+export PGPASSWORD=benchpass
+
+# Guix
+export HOSTS=x86_64-linux-gnu
+export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
+export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
+export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
+
+# Object Storage
+export KEY_ID=<your_id>
+export SECRET_ACCESS_KEY=<your_password>
+
+# benchcoin log level
+export RUST_LOG=info
+
