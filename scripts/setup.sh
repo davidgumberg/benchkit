@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+echo "Running setup.sh"
 
 # Scripts always recieve the same arguments from benchkit in the same order:
 #
@@ -21,11 +22,10 @@ fi
 # NETWORK="$3"
 # SNAPSHOT_PATH="$4"
 TMP_DATADIR="$5"
-echo "TMP_DATADIR: ${TMP_DATADIR}"
+# echo "TMP_DATADIR: ${TMP_DATADIR}"
 
-# Make dir if not exists
+echo "Creating datadir ${TMP_DATADIR} with mkdir -p"
 mkdir -p "${TMP_DATADIR}"
-# Clean contents
-rm -Rf "${TMP_DATADIR:?}/*"
 
-exit 0
+echo "Cleaning datadir contents from ${TMP_DATADIR}"
+rm -Rf "${TMP_DATADIR:?}"/*

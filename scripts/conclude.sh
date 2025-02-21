@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+echo "Running conclude.sh"
 
 # Scripts always recieve the same arguments from benchkit in the same order:
 #
@@ -21,11 +22,10 @@ fi
 # NETWORK="$3"
 # SNAPSHOT_PATH="$4"
 TMP_DATADIR="$5"
-echo "TMP_DATADIR: ${TMP_DATADIR}"
+# echo "TMP_DATADIR: ${TMP_DATADIR}"
 
 # Next we move datadir files to the outdir
 # mv "$5"/debug.log "$2"/
 
-# Clean tmp_data_dir contents
-rm -Rf "${5:?}"/*
-exit 0
+echo "Cleaning datadir contents from ${TMP_DATADIR}"
+rm -Rf "${TMP_DATADIR:?}"/*

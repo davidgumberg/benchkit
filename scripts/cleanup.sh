@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+echo "Running cleanup.sh"
 
 # Scripts always recieve the same arguments from benchkit in the same order:
 #
@@ -16,6 +17,6 @@ if [ "$#" -ne 5 ]; then
     exit 1
 fi
 
-# Clean tmp_data_dir contents
-rm -Rf "${5:?}"/*
-exit 0
+TMP_DATADIR="$5"
+
+rm -Rf "${TMP_DATADIR:?}"/*
