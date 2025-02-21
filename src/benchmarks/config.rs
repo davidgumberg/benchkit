@@ -20,6 +20,7 @@ pub struct SingleConfig {
     pub name: String,
     pub env: Option<HashMap<String, String>>,
     pub network: String,
+    pub connect: Option<String>,
     pub hyperfine: HashMap<String, Value>,
 }
 

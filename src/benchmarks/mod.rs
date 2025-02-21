@@ -11,7 +11,7 @@ pub use build::Builder;
 mod config;
 pub use config::{load_bench_config, BenchmarkConfig, BenchmarkGlobalConfig, SingleConfig};
 mod hooks;
-use hooks::HookManager;
+use hooks::{HookManager, ScriptArgs};
 // mod object_storage;
 // pub use object_storage::ObjectStorage;
 
@@ -75,29 +75,6 @@ This can be downloaded with `benchkit snapshot download {}`",
     async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         info!("Running benchmark: {:?}", bench);
 
-        // First read the global.commits field and expand commit hashes
-        // let mut full_commits = Vec::new();
-        // for commit in &self.config.bench.global.commits {
-        //     let output = Command::new("git")
-        //         .current_dir(&self.config.bench.global.source)
-        //         .arg("rev-parse")
-        //         .arg(commit)
-        //         .output()
-        //         .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
-        //
-        //     if !output.status.success() {
-        //         anyhow::bail!("Failed to resolve commit hash '{}'", commit);
-        //     }
-        //
-        //     let full_hash = String::from_utf8(output.stdout)
-        //         .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
-        //         .trim()
-        //         .to_string();
-        //
-        //     debug!("Resolved commit {} to full hash {}", commit, full_hash);
-        //     full_commits.push(full_hash);
-        // }
-
         // Merge hyperfine options from global and benchmark configs
         let mut merged_hyperfine = HashMap::new();
         if let Some(global_opts) = &self.config.bench.global.hyperfine {
@@ -106,7 +83,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         merged_hyperfine.extend(bench.hyperfine.clone());
 
         // Create a temporary output directory
-        let out_dir = tempfile::TempDir::new()?.into_path();
+        // let out_dir = tempfile::TempDir::new()?.into_path();
 
         // Update command to use full binary path and apply chain= param
         if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
@@ -123,15 +100,18 @@ This can be downloaded with `benchkit snapshot download {}`",
         }
 
         // Add script hooks
+
+        let script_args = ScriptArgs {
+            binary: format!("{}/bitcoind-{{commit}}", self.config.app.bin_dir.display()),
+            connect_address: bench.connect.clone().unwrap_or_default(),
+            network: bench.network.clone(),
+            snapshot_path: self.config.app.snapshot_dir.clone(),
+            tmp_data_dir: self.config.bench.global.tmp_data_dir.clone(),
+        };
         let hook_manager =
             HookManager::new().with_context(|| "Failed to initialize hook manager")?;
         hook_manager
-            .add_script_hooks(
-                &mut merged_hyperfine,
-                &bench.network,
-                self.config.bench.global.tmp_data_dir.clone(),
-                out_dir,
-            )
+            .add_script_hooks(&mut merged_hyperfine, script_args)
             .with_context(|| "Failed to add hyperfine script hooks")?;
 
         // Add commits to parameter-lists if not already present

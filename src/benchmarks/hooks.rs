@@ -4,6 +4,15 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[derive()]
+pub struct ScriptArgs {
+    pub binary: String,
+    pub connect_address: String,
+    pub network: String,
+    pub snapshot_path: PathBuf,
+    pub tmp_data_dir: PathBuf,
+}
+
 pub struct HookManager {}
 
 impl HookManager {
@@ -16,33 +25,35 @@ impl HookManager {
     pub fn add_script_hooks(
         &self,
         options: &mut HashMap<String, Value>,
-        network: &String,
-        tmp_data_dir: PathBuf,
-        out_dir: PathBuf,
+        script_args: ScriptArgs,
     ) -> Result<()> {
         let hook_types = ["setup", "conclude", "prepare", "cleanup"];
         // Check if we are using network "mainnet"
         // If we are not, append the "network" to the data_dir_path
-        let modified_data_dir = if network == "mainnet" {
-            tmp_data_dir
+        let modified_data_dir = if script_args.network == "mainnet" {
+            script_args.tmp_data_dir
         } else {
-            tmp_data_dir.join(network)
+            script_args.tmp_data_dir.join(&script_args.network)
         };
 
         for hook_type in hook_types.iter() {
             if let Some(value) = options.get_mut(*hook_type) {
                 if let Some(script) = value.as_str() {
-                    // Construct the new script command with directories as arguments
+                    // Construct the new script command with arguments in a fixed order
                     let new_script = format!(
-                        "{} {} {}",
+                        "{} {} {} {} {} {}",
                         script,
+                        script_args.binary,
+                        script_args.connect_address,
+                        script_args.network,
+                        script_args.snapshot_path.display(),
                         modified_data_dir.display(),
-                        out_dir.display()
                     );
                     debug!("Adding {hook_type} to options as: {new_script}");
 
                     // Update the value in the options map
                     *value = Value::String(new_script);
+                    debug!("Updated command to: {:?}", value.as_str());
                 }
             }
         }

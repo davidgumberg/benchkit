@@ -40,6 +40,9 @@ benchmarks:
     # Bitcoin network to run on (main, test, testnet4, signet, regtest)
     network: signet
 
+    # An optional address for bitcoind to -connect to for sync
+    connect: 10.0.0.88
+
     # Local hyperfine options.
     # These override global hyperfine options in case of conflict.
     # Uses regular hyperfine syntax.
