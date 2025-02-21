@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::{debug, info, warn};
 use std::process::Command;
 
 use crate::config::AppConfig;
@@ -38,7 +39,7 @@ impl Builder {
                 .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
                 .trim()
                 .to_string();
-            println!(
+            debug!(
                 "Resolved config commit {} to full hash {}",
                 commit, full_hash
             );
@@ -58,7 +59,7 @@ impl Builder {
     fn binary_exists(&self, commit: &str) -> bool {
         let binary_path = self.app_config.bin_dir.join(format!("bitcoind-{}", commit));
         if binary_path.exists() {
-            println!(
+            info!(
                 "Binary already exists for commit {}, skipping build",
                 commit
             );
@@ -73,7 +74,7 @@ impl Builder {
 
         for commit in &self.bench_config.global.commits {
             if !self.binary_exists(commit) {
-                println!("Building binary for commit {}", commit);
+                info!("Building binary for commit {}", commit);
                 self.build_commit(commit)?;
             }
         }
@@ -146,7 +147,7 @@ impl Builder {
         // Apply each patch
         for patch in &patches {
             let patch_path = patches_dir.join(patch);
-            println!("Applying patch: {}", patch_path.display());
+            info!("Applying patch: {}", patch_path.display());
 
             // First try with -3 for git-apply to attempt 3-way merge
             let status = Command::new("git")
@@ -160,10 +161,7 @@ impl Builder {
 
             if !status.success() {
                 // If 3-way merge fails, try to apply patch with --reject
-                println!(
-                    "Warning: 3-way merge failed for {}, attempting with --reject",
-                    patch
-                );
+                warn!("3-way merge failed for {}, attempting with --reject", patch);
 
                 let status = Command::new("git")
                     .current_dir(&self.bench_config.global.source)
@@ -199,7 +197,7 @@ impl Builder {
                 }
             }
 
-            println!("Successfully applied patch: {}", patch);
+            info!("Successfully applied patch: {}", patch);
         }
 
         Ok(())

@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
+use log::{debug, info};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
-use std::{collections::HashMap, path::PathBuf};
 
 mod build;
 pub use build::Builder;
@@ -40,7 +41,7 @@ impl Runner {
         run_id: Option<i32>,
     ) -> Result<Self> {
         let run_id = run_id.unwrap_or_else(Self::generate_run_id);
-        println!("No run_id specified. Generated random run_id: {}", run_id);
+        info!("No run_id specified. Generated random run_id: {}", run_id);
 
         Ok(Self {
             app_config: app_config.clone(),
@@ -96,7 +97,7 @@ This can be downloaded with `benchkit snapshot download {}`",
     }
 
     async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
-        println!("Running benchmark: {:?}", bench);
+        info!("Running benchmark: {:?}", bench);
         // First read the global.commits field and expand commit hashes
         let mut full_commits = Vec::new();
         for commit in &self.bench_config.global.commits {
@@ -116,7 +117,7 @@ This can be downloaded with `benchkit snapshot download {}`",
                 .trim()
                 .to_string();
 
-            println!("Resolved commit {} to full hash {}", commit, full_hash);
+            debug!("Resolved commit {} to full hash {}", commit, full_hash);
             full_commits.push(full_hash);
         }
 
@@ -217,7 +218,7 @@ This can be downloaded with `benchkit snapshot download {}`",
     ) -> Result<()> {
         let mut cmd = self.build_hyperfine_command(bench, merged_opts)?;
 
-        println!("Running hyperfine command: {:?}", cmd);
+        debug!("Running hyperfine command: {:?}", cmd);
         let status = cmd.status().with_context(|| {
             format!("Failed to execute hyperfine for benchmark '{}'", bench.name)
         })?;
@@ -319,7 +320,7 @@ This can be downloaded with `benchkit snapshot download {}`",
             }
         }
 
-        println!("Built hyperfine command: {:?}", cmd);
+        debug!("Built hyperfine command: {:?}", cmd);
         Ok(cmd)
     }
 }

@@ -39,7 +39,7 @@ pub async fn store_results(
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            log::error!("connection error: {}", e);
         }
     });
 

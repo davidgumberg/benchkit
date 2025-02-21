@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use log::{error, info};
 use serde::Deserialize;
 use std::{io, process::Command};
 use tokio::time::{timeout, Duration};
@@ -23,7 +24,7 @@ impl DatabaseConfig {
 }
 
 pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
-    println!("Initializing database...");
+    info!("Initializing database...");
     check_postgres_running()?;
 
     let user_exists = check_postgres_user(&db_conf.user)?;
@@ -44,13 +45,13 @@ pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            error!("connection error: {}", e);
         }
     });
 
     client.batch_execute(include_str!("schema.sql")).await?;
 
-    println!("Database setup completed successfully");
+    info!("Database setup completed successfully");
     Ok(())
 }
 
@@ -92,7 +93,7 @@ fn ensure_user_createdb(user: &str) -> Result<()> {
         .trim()
         .is_empty()
     {
-        println!("Granting CREATEDB permission to {}", user);
+        info!("Granting CREATEDB permission to {}", user);
         let status = Command::new("sudo")
             .arg("-u")
             .arg("postgres")
@@ -127,7 +128,7 @@ fn check_postgres_database(database: &str) -> Result<bool> {
 }
 
 fn create_postgres_user(user: &str, password: &str) -> Result<()> {
-    println!("Creating user {}", user);
+    info!("Creating user {}", user);
     let status = Command::new("sudo")
         .arg("-u")
         .arg("postgres")
@@ -147,7 +148,7 @@ fn create_postgres_user(user: &str, password: &str) -> Result<()> {
 }
 
 fn create_postgres_database(database: &str, owner: &str) -> Result<()> {
-    println!("Creating database {}", database);
+    info!("Creating database {}", database);
     let status = Command::new("sudo")
         .arg("-u")
         .arg("postgres")
@@ -167,7 +168,7 @@ fn create_postgres_database(database: &str, owner: &str) -> Result<()> {
 }
 
 fn grant_privileges(database: &str, user: &str) -> Result<()> {
-    println!("Granting privileges on {} to {}", database, user);
+    info!("Granting privileges on {} to {}", database, user);
     let status = Command::new("sudo")
         .arg("-u")
         .arg("postgres")
@@ -205,23 +206,23 @@ pub async fn delete_database_interactive(db_config: &DatabaseConfig) -> Result<(
 }
 
 async fn delete_database(config: &DatabaseConfig) -> Result<()> {
-    println!("Deleting database...");
+    info!("Deleting database...");
     check_postgres_running()?;
 
     if check_postgres_database(&config.database)? {
-        println!("Dropping database {}", config.database);
+        info!("Dropping database {}", config.database);
         drop_database(&config.database)?;
     } else {
-        println!("Database {} does not exist", config.database);
+        info!("Database {} does not exist", config.database);
     }
 
     if check_postgres_user(&config.user)? {
-        println!("Dropping user {}", config.user);
+        info!("Dropping user {}", config.user);
         drop_user(&config.user)?;
     } else {
-        println!("User {} does not exist", config.user);
+        info!("User {} does not exist", config.user);
     }
-    println!("Database and user deleted successfully.");
+    info!("Database and user deleted successfully.");
     Ok(())
 }
 
@@ -281,7 +282,7 @@ pub async fn check_connection(conn_string: &str) -> Result<()> {
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            error!("connection error: {}", e);
         }
     });
 
@@ -289,7 +290,7 @@ pub async fn check_connection(conn_string: &str) -> Result<()> {
         .await
         .with_context(|| "Database query timeout")?
         .with_context(|| "Failed to execute test query")?;
-    println!("Successfully connected to database");
+    info!("Successfully connected to database");
 
     Ok(())
 }

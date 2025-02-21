@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::debug;
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -67,6 +68,6 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
             .with_context(|| format!("Failed to resolve path: {:?}", abs_path))?;
     }
 
-    println!("Using app configuration\n{:?}", config);
+    debug!("Using app configuration\n{:?}", config);
     Ok(config)
 }

@@ -9,7 +9,9 @@ use benchkit::{
 };
 
 use clap::{Parser, Subcommand};
+use env_logger::Env;
 // use futures::StreamExt;
+use log::info;
 // use object_store::aws::{AmazonS3, AmazonS3Builder};
 // use object_store::ObjectStore;
 use std::{path::PathBuf, process};
@@ -125,6 +127,7 @@ enum SnapshotCommands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
 
     // Run system commands without loading any configuration
@@ -172,7 +175,7 @@ async fn main() -> Result<()> {
                         *run_id,
                     )?;
                     runner.run().await?;
-                    println!("All benchmarks completed successfully.");
+                    info!("All benchmarks completed successfully.");
                 }
                 RunCommands::Single {
                     name,
@@ -187,7 +190,7 @@ async fn main() -> Result<()> {
                         *run_id,
                     )?;
                     runner.run_single(name).await?;
-                    println!("Benchmark completed successfully.");
+                    info!("Benchmark completed successfully.");
                 }
             }
         }
@@ -200,11 +203,11 @@ async fn main() -> Result<()> {
         //     // Create an S3 store pointing to Hetzner
         //     let key_id = std::env::var("KEY_ID").unwrap();
         //     let secret_key = std::env::var("SECRET_ACCESS_KEY").unwrap();
-        //     println!("Using:");
-        //     println!("  url: {OBJECT_URL}");
-        //     println!("  bucket: {BUCKET}");
-        //     println!("  key_id: {key_id}");
-        //     // println!("  secret_key: {secret_key}");
+        //     info!("Using:");
+        //     info!("  url: {OBJECT_URL}");
+        //     info!("  bucket: {BUCKET}");
+        //     info!("  key_id: {key_id}");
+        //     // info!("  secret_key: {secret_key}");
         //     let store = AmazonS3Builder::new()
         //         .with_bucket_name(BUCKET)
         //         .with_access_key_id(key_id)
@@ -225,9 +228,9 @@ async fn main() -> Result<()> {
 //     while let Some(meta) = list_stream.next().await {
 //         match meta {
 //             Ok(meta) => {
-//                 println!("Name: {}, Size: {} bytes", meta.location, meta.size);
+//                 info!("Name: {}, Size: {} bytes", meta.location, meta.size);
 //             }
-//             Err(e) => eprintln!("Error listing object: {}", e),
+//             Err(e) => error!("Error listing object: {}", e),
 //         }
 //     }
 //

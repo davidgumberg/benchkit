@@ -1,6 +1,7 @@
 use crate::types::Network;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
+use log::info;
 use reqwest::Client;
 use std::path::Path;
 use tokio::fs::File;
@@ -40,7 +41,7 @@ pub async fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow
     let url = format!("{}{}", SNAPSHOT_HOST, filename);
     let client = Client::new();
     let filepath = snapshot_dir.join(filename);
-    println!("Downloading {url} to {filepath:?}");
+    info!("Downloading {url} to {filepath:?}");
 
     // Get the content length for the progress bar
     let response = client.get(&url).send().await?;
@@ -65,6 +66,6 @@ pub async fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow
         pb.set_position(downloaded);
     }
     pb.finish();
-    println!("Successfully downloaded {filepath:?}");
+    info!("Successfully downloaded {filepath:?}");
     Ok(())
 }

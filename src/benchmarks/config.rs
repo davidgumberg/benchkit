@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::debug;
 use serde::Deserialize;
 use serde_json::Value;
 use shellexpand;
@@ -75,6 +76,6 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
     process_path(&mut config.global.source, false)?;
     process_path(&mut config.global.tmp_data_dir, true)?;
 
-    println!("Using configuration\n{:?}", config);
+    debug!("Using configuration\n{:?}", config);
     Ok(config)
 }
