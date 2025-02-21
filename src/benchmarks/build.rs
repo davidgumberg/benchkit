@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::process::Command;
 
 use crate::config::GlobalConfig;
@@ -75,7 +75,7 @@ impl Builder {
         self.checkout_commit(original_commit)?;
         let patched_commit = self.apply_patches()?;
         debug!("Commit hash after applying patches: {}", patched_commit);
-        self.run_build(patched_commit.as_str(), original_commit)?;
+        self.run_build(patched_commit.as_str())?;
         self.copy_binary(patched_commit.as_str(), original_commit)?;
         Ok(())
     }
@@ -180,7 +180,7 @@ impl Builder {
         Ok(String::from(&full_hash[..12]))
     }
 
-    fn run_build(&self, patched_commit: &str, original_commit: &str) -> Result<()> {
+    fn run_build(&self, patched_commit: &str) -> Result<()> {
         let short_patched_commit = self.get_full_commit(patched_commit).unwrap();
 
         // Create base command depending on CI environment
