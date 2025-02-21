@@ -11,7 +11,7 @@ use benchkit::{
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 // use futures::StreamExt;
-use log::info;
+use log::{info, warn};
 // use object_store::aws::{AmazonS3, AmazonS3Builder};
 // use object_store::ObjectStore;
 use std::{path::PathBuf, process};
@@ -38,6 +38,14 @@ struct Cli {
     /// Benchmark config
     #[arg(short, long, default_value = DEFAULT_BENCH_CONFIG)]
     bench_config: PathBuf,
+
+    /// Run ID
+    #[arg(short, long, env = "BENCH_RUN_ID")]
+    run_id: Option<i64>,
+
+    /// Pull Request number
+    #[arg(short, long, env = "BENCH_PR_NUMBER")]
+    pr_number: Option<i64>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -54,7 +62,7 @@ enum Commands {
         #[command(subcommand)]
         command: RunCommands,
     },
-    /// Download assumeutxo snapshots
+    /// Download an assumeutxo snapshot
     Snapshot {
         #[command(subcommand)]
         command: SnapshotCommands,
@@ -80,28 +88,12 @@ enum DbCommands {
 #[derive(Subcommand, Debug)]
 enum RunCommands {
     /// Run all benchmarks found in config yml
-    All {
-        /// Pull request associated with this run
-        #[arg(long)]
-        pr_number: Option<i32>,
-
-        /// Run ID associated with this run
-        #[arg(long)]
-        run_id: Option<i32>,
-    },
+    All {},
     /// Run a single benchmark from config yml
     Single {
         /// Benchmark name to run (single only)
         #[arg(short, long)]
         name: String,
-
-        /// Pull request associated with this run
-        #[arg(long)]
-        pr_number: Option<i32>,
-
-        /// Run ID associated with this run
-        #[arg(long)]
-        run_id: Option<i32>,
     },
 }
 
@@ -117,9 +109,9 @@ enum SystemCommands {
 
 #[derive(Subcommand, Debug)]
 enum SnapshotCommands {
-    /// Download blockchain snapshot
+    /// Download a snapshot
     Download {
-        /// Network to download (mainnet or signet)
+        /// Network (mainnet or signet)
         #[arg(value_enum)]
         network: Network,
     },
@@ -141,8 +133,22 @@ async fn main() -> Result<()> {
         process::exit(0);
     }
 
+    // If we didn't get a run_id or pr_number generate them now.
+    // The run_id in particular is used as a temporary directory for the run, collecting artifacts.
+    let run_id = cli.run_id.unwrap_or_else(|| {
+        let id = generate_id(false);
+        warn!("No run_id specified. Generated random run_id: {}", id);
+        id
+    });
+
+    let pr_number = cli.pr_number.unwrap_or_else(|| {
+        let id = generate_id(true);
+        warn!("No PR number specified. Generated random PR number: {}", id);
+        id
+    });
+
     let app: AppConfig = load_app_config(&cli.app_config)?;
-    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
+    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config, run_id, pr_number)?;
     let config = GlobalConfig { app, bench };
 
     match &cli.command {
@@ -166,17 +172,13 @@ async fn main() -> Result<()> {
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
             match command {
-                RunCommands::All { pr_number, run_id } => {
-                    let runner = benchmarks::Runner::new(config.clone(), *pr_number, *run_id)?;
+                RunCommands::All {} => {
+                    let runner = benchmarks::Runner::new(config.clone())?;
                     runner.run().await?;
                     info!("All benchmarks completed successfully.");
                 }
-                RunCommands::Single {
-                    name,
-                    pr_number,
-                    run_id,
-                } => {
-                    let runner = benchmarks::Runner::new(config.clone(), *pr_number, *run_id)?;
+                RunCommands::Single { name } => {
+                    let runner = benchmarks::Runner::new(config.clone())?;
                     runner.run_single(name).await?;
                     info!("Benchmark completed successfully.");
                 }
@@ -224,3 +226,13 @@ async fn main() -> Result<()> {
 //
 //     Ok(())
 // }
+
+fn generate_id(pr: bool) -> i64 {
+    use rand::Rng;
+    let mut rng = rand::rng();
+    if pr {
+        rng.random_range(100_000_000..999_999_999)
+    } else {
+        rng.random_range(1000..50000)
+    }
+}

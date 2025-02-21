@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,30 +20,11 @@ use crate::types::Network;
 
 pub struct Runner {
     config: GlobalConfig,
-    pull_request_number: Option<i32>,
-    run_id: i32,
 }
 
 impl Runner {
-    fn generate_run_id() -> i32 {
-        use rand::Rng;
-        let mut rng = rand::rng();
-        rng.random_range(100_000_000..999_999_999)
-    }
-
-    pub fn new(
-        config: GlobalConfig,
-        pull_request_number: Option<i32>,
-        run_id: Option<i32>,
-    ) -> Result<Self> {
-        let run_id = run_id.unwrap_or_else(Self::generate_run_id);
-        warn!("No run_id specified. Generated random run_id: {}", run_id);
-
-        Ok(Self {
-            config,
-            pull_request_number,
-            run_id,
-        })
+    pub fn new(config: GlobalConfig) -> Result<Self> {
+        Ok(Self { config })
     }
 
     pub async fn run(&self) -> Result<()> {
@@ -204,8 +185,8 @@ This can be downloaded with `benchkit snapshot download {}`",
             &self.config.app.database.connection_string(),
             &bench.name,
             &results_json,
-            self.pull_request_number,
-            self.run_id,
+            self.config.bench.pr_number,
+            self.config.bench.run_id,
         )
         .await?;
 
