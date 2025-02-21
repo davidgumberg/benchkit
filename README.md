@@ -1,8 +1,6 @@
 # Benchkit
 
-A Rust-based benchmarking toolkit designed for benchmarking Bitcoin Core, using
-[hyperfine](https://github.com/sharkdp/hyperfine) as the underlying
-benchmarking engine.
+A Rust-based benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine](https://github.com/sharkdp/hyperfine) as the underlying benchmarking engine.
 
 ## Features
 
@@ -12,6 +10,9 @@ benchmarking engine.
 - Configurable benchmark environment variables
 - Integration with CI/PR workflows via PR number and run ID tracking
 - Command wrapping support (e.g., `taskset` for CPU pinning)
+- System performance tuning and monitoring
+- Object storage integration for benchmark artifacts
+- AssumeUTXO snapshot management
 
 ## Prerequisites
 
@@ -19,6 +20,7 @@ benchmarking engine.
 - PostgreSQL
 - hyperfine
 - sudo access for database operations
+- Guix (for building Bitcoin Core)
 
 ## Installation
 
@@ -26,86 +28,109 @@ benchmarking engine.
 cargo install --path .
 ```
 
-## Usage
+## Environment Configuration
 
-### Database Setup
+The project includes an `.envrc.example` file that shows all required environment variables. If you use `direnv`, you can copy this to `.envrc` and modify it. Otherwise, ensure these variables are set in your environment.
 
-Test database connection:
+Key environment variables:
+
 ```bash
-benchkit db test
+# Benchkit Database Configuration
+export PGHOST=127.0.0.1
+export PGPORT=5432
+export PGDATABASE=benchmarks
+export PGUSER=benchkit
+export PGPASSWORD=benchpass
+
+# Guix Build Configuration
+export HOSTS=x86_64-linux-gnu  # Important: Set this to your host architecture
+export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
+export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
+export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
+
+# Object Storage (optional)
+export KEY_ID=<your_id>
+export SECRET_ACCESS_KEY=<your_password>
+
+# Logging
+export RUST_LOG=info
 ```
 
-Initialize the database:
+**Important Note**: When building Bitcoin Core with Guix, you should set `HOSTS` to match your target architecture. This prevents unnecessary cross-compilation.
+
+## Command Reference
+
+### Database Management
+
 ```bash
+# Initialize a PostGres database for benchkit
 benchkit db init
-```
 
-Delete database and user (caution):
-```bash
+# Test database connection
+benchkit db test
+
+# Delete database and user (interactive)
 benchkit db delete
 ```
 
-### Build Bitcoin Core
+### Building Bitcoin Core
 
-Build bitcoind binaries:
 ```bash
+# Build bitcoind binaries for specified commits
 benchkit build
 ```
 
 ### Running Benchmarks
 
-Run all benchmarks from config:
 ```bash
+# Run all benchmarks from config
 benchkit run all
-```
 
-Run a specific benchmark:
-```bash
+# Run a specific benchmark
 benchkit run single --name "benchmark-name"
 ```
 
-### Configuration
+### System Performance Management
 
-Benchkit uses YAML configuration files to define it's own settings and configure benchmarks.
+```bash
+# Check current system performance settings
+benchkit system check
 
-A typical benchkit *config.yml* looks like:
+# Tune system for benchmarking (requires sudo)
+benchkit system tune
+
+# Reset system settings to default
+benchkit system reset
+```
+
+### AssumeUTXO Snapshot Management
+
+```bash
+# Download snapshot for specific network
+benchkit snapshot download [mainnet|signet]
+```
+
+## Configuration Files
+
+### Application Configuration (config.yml)
 
 ```yaml
----
-# Benchkit home directory
 home_dir: $HOME/.local/state/benchkit
-
-# The directory intermediate built binaries will be saved to.
 bin_dir: $HOME/.local/state/benchkit/binaries
+snapshot_dir: $HOME/.local/state/benchkit/snapshots
 
-# Database configuration
 database:
-
-  # postgres host
   host: localhost
-
-  # postgres port
   port: 5432
-
-  # database name
   database: benchmarks
-
-  # postgres username
   user: benchkit
-
-  # postgres password
   password: benchcoin
 ```
 
-And a *benchmark.yml*:
+### Benchmark Configuration (benchmark.yml)
 
 ```yaml
----
-# Global benchmarking options.
 global:
-
-  # Global hyperfine option defaults.
-  # Will be overwritten by local options specified per-benchmark.
   hyperfine:
     warmup: 1
     runs: 5
@@ -113,56 +138,37 @@ global:
     shell: /bin/bash
     show_output: false
 
-  # An optional command to wrap the hyperfine command.
   wrapper: "taskset -c 1-14"
-
-  # Path to source code (required).
-  # Can point to a local or online fork of bitcoin/bitcoin.
   source: $HOME/src/core/bitcoin
-
-  # Which branch of the source to check out (required).
   branch: benchmark-test
-
-  # Commits to build binaries from (required).
-  # A list of one or more all found in <branch>
   commits: ["62bd1960fdf", "e932c6168b5"]
+  tmp_data_dir: /tmp/benchkit
 
-# Local benchmark config.
 benchmarks:
-
-  # benchmark name (required).
-  - name: "Check bitcoind version"
-
-    # Bitcoin network to run on (main, test, testnet4, signet, regtest)
+  - name: "assumeutxo signet test sync"
     network: signet
-
-    # Local hyperfine options.
-    # These override global hyperfine options in case of conflict.
-    # Uses regular hyperfine syntax.
+    connect: 127.0.0.1:39333
     hyperfine:
-
-      # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
-      # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} --version"
-      warmup: 5
-      runs: 10
-
-      # These have "sane" defaults in benchkit, but can point to any command or script too
-      # setup:
-      # conclude:
-      # prepare:
-      # cleanup:
-
-      # A list of zero or more parameters.
-      # These will be tried as a matrix.
+      command: "bitcoind -dbcache={dbcache} -stopatheight=160001"
       parameter_lists:
-
-        # The variable name to use in hyperfine command substitution.
         - var: dbcache
-          # A list of values to substitute in.
           values: ["450", "32000"]
-
 ```
+
+## Benchmark Scripts
+
+The following scripts can be customized in the `scripts/` directory:
+
+- `setup.sh`: Initial setup before benchmarking
+- `prepare.sh`: Preparation before each benchmark run
+- `conclude.sh`: Cleanup after each benchmark run
+- `cleanup.sh`: Final cleanup after all benchmarks
+
+## Tips
+
+- If running against a local Bitcoin Core, it's generally easier to configure
+  the "seed" node with custom `-port` and `-rpcport` settings, and then connect
+  to it from the benchcoin node using `-connect=<host>:<port>`.
 
 ## Contributing
 
