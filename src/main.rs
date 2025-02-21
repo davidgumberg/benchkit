@@ -50,13 +50,13 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Build bitcoin core binaries using guix
+    Build {},
     /// Database administration
     Db {
         #[command(subcommand)]
         command: DbCommands,
     },
-    /// Build bitcoin core binaries using guix
-    Build {},
     /// Run benchmarks
     Run {
         #[command(subcommand)]
@@ -73,6 +73,11 @@ enum Commands {
         command: SystemCommands,
     },
     S3,
+    /// Check patches apply cleanly
+    Patch {
+        #[command(subcommand)]
+        command: PatchCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -117,6 +122,12 @@ enum SnapshotCommands {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum PatchCommands {
+    /// Test the patches will apply cleanly
+    Test {},
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -152,6 +163,10 @@ async fn main() -> Result<()> {
     let config = GlobalConfig { app, bench };
 
     match &cli.command {
+        Commands::Build {} => {
+            let builder = benchmarks::Builder::new(config.clone())?;
+            builder.build()?;
+        }
         Commands::Db { command } => match command {
             DbCommands::Init => {
                 database::initialize_database(&config.app.database).await?;
@@ -163,10 +178,6 @@ async fn main() -> Result<()> {
                 database::delete_database_interactive(&config.app.database).await?;
             }
         },
-        Commands::Build {} => {
-            let builder = benchmarks::Builder::new(config.clone())?;
-            builder.build()?;
-        }
         Commands::Run { command } => {
             database::check_connection(&config.app.database).await?;
             let builder = benchmarks::Builder::new(config.clone())?;
@@ -187,6 +198,12 @@ async fn main() -> Result<()> {
         Commands::Snapshot { command } => match command {
             SnapshotCommands::Download { network } => {
                 download_snapshot(network, &config.app.snapshot_dir).await?;
+            }
+        },
+        Commands::Patch { command } => match command {
+            PatchCommands::Test {} => {
+                let builder = benchmarks::Builder::new(config.clone())?;
+                builder.test_patch_commits()?;
             }
         },
         // Commands::S3 {} => {

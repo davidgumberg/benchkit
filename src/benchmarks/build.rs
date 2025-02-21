@@ -33,6 +33,7 @@ impl Builder {
     }
 
     pub fn build(&self) -> Result<()> {
+        self.check_clean_worktree()?;
         let initial_ref = self.get_initial_ref()?;
 
         for commit in &self.config.bench.global.commits {
@@ -43,6 +44,29 @@ impl Builder {
         }
 
         self.restore_git_state(&initial_ref)?;
+        Ok(())
+    }
+
+    fn check_clean_worktree(&self) -> Result<()> {
+        // Check for unstaged changes
+        let unstaged = Command::new("git")
+            .current_dir(&self.config.bench.global.source)
+            .args(["diff", "--quiet"])
+            .status()?;
+
+        if !unstaged.success() {
+            anyhow::bail!("Worktree has unstaged changes. Please commit or stash them first.");
+        }
+
+        // Check for staged changes
+        let staged = Command::new("git")
+            .current_dir(&self.config.bench.global.source)
+            .args(["diff", "--quiet", "--staged"])
+            .status()?;
+
+        if !staged.success() {
+            anyhow::bail!("Worktree has staged changes. Please commit or stash them first.");
+        }
         Ok(())
     }
 
@@ -80,6 +104,17 @@ impl Builder {
         Ok(())
     }
 
+    pub fn test_patch_commits(&self) -> Result<()> {
+        self.check_clean_worktree()?;
+        let initial_ref = self.get_initial_ref()?;
+        for commit in &self.config.bench.global.commits {
+            self.checkout_commit(commit)?;
+            self.test_patches()?;
+        }
+        self.restore_git_state(&initial_ref)?;
+        Ok(())
+    }
+
     fn checkout_commit(&self, commit: &str) -> Result<()> {
         let status = Command::new("git")
             .current_dir(&self.config.bench.global.source)
@@ -95,6 +130,28 @@ impl Builder {
     }
 
     fn apply_patches(&self) -> Result<String> {
+        self.process_patches(false)?;
+
+        // Get the current commit hash after applying patches
+        let output = Command::new("git")
+            .current_dir(&self.config.bench.global.source)
+            .arg("rev-parse")
+            .arg("HEAD")
+            .output()
+            .context("Failed to get HEAD commit hash after applying patches")?;
+
+        if !output.status.success() {
+            anyhow::bail!("Failed to get HEAD commit hash after applying patches");
+        }
+
+        Ok(String::from_utf8(output.stdout)?.trim().to_string())
+    }
+
+    fn test_patches(&self) -> Result<()> {
+        self.process_patches(true)
+    }
+
+    fn process_patches(&self, check_only: bool) -> Result<()> {
         let patches = [
             "0001-guix-benchmarking-patches.patch",
             "0001-validation-assumeutxo-benchmarking-patches.patch",
@@ -114,47 +171,51 @@ impl Builder {
         // Apply each patch
         for patch in &patches {
             let patch_path = patches_dir.join(patch);
-            info!("Applying patch: {}", patch_path.display());
+            let operation = if check_only { "Testing" } else { "Applying" };
+            info!("{} patch: {}", operation, patch_path.display());
 
-            let status = Command::new("git")
-                .current_dir(&self.config.bench.global.source)
-                .arg("-c")
-                .arg("user.name=temp")
-                .arg("-c")
-                .arg("user.email=temp@temp.com")
-                .arg("am")
-                .arg("--no-signoff")
-                .arg(patch_path.display().to_string())
-                .status()
-                .with_context(|| format!("Failed to execute git am for patch {}", patch))?;
+            let mut cmd = Command::new("git");
+            cmd.current_dir(&self.config.bench.global.source);
 
-            if !status.success() {
-                // If patch application fails, abort the am session
-                let _ = Command::new("git")
-                    .current_dir(&self.config.bench.global.source)
+            if check_only {
+                cmd.arg("apply")
+                    .arg("--check")
+                    .arg(patch_path.display().to_string());
+            } else {
+                cmd.arg("-c")
+                    .arg("user.name=temp")
+                    .arg("-c")
+                    .arg("user.email=temp@temp.com")
                     .arg("am")
-                    .arg("--abort")
-                    .status();
-
-                anyhow::bail!("Failed to apply patch {}", patch);
+                    .arg("--no-signoff")
+                    .arg(patch_path.display().to_string());
             }
 
-            info!("Successfully applied patch: {}", patch);
+            let status = cmd.status().with_context(|| {
+                let action = if check_only { "test" } else { "apply" };
+                format!("Failed to {} patch {}", action, patch)
+            })?;
+
+            if !status.success() {
+                if !check_only {
+                    // If patch application fails, abort the am session
+                    let _ = Command::new("git")
+                        .current_dir(&self.config.bench.global.source)
+                        .arg("am")
+                        .arg("--abort")
+                        .status();
+                }
+                anyhow::bail!(
+                    "Failed to {} patch: {}",
+                    if check_only { "test" } else { "apply" },
+                    patch
+                );
+            }
+
+            let action = if check_only { "tested" } else { "applied" };
+            info!("Successfully {} patch: {}", action, patch);
         }
-
-        // Get the current commit hash after applying patches
-        let output = Command::new("git")
-            .current_dir(&self.config.bench.global.source)
-            .arg("rev-parse")
-            .arg("HEAD")
-            .output()
-            .context("Failed to get HEAD commit hash after applying patches")?;
-
-        if !output.status.success() {
-            anyhow::bail!("Failed to get HEAD commit hash after applying patches");
-        }
-
-        Ok(String::from_utf8(output.stdout)?.trim().to_string())
+        Ok(())
     }
 
     fn get_full_commit(&self, commit: &str) -> Result<String> {

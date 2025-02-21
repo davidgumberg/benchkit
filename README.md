@@ -107,6 +107,13 @@ benchkit system reset
 benchkit snapshot download [mainnet|signet]
 ```
 
+### Patch testing
+
+```bash
+# Test the benchcoin patches apply cleanly to all refs
+benchkit patch test
+```
+
 ## Configuration Files
 
 ### Application Configuration (config.yml)
