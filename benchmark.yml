@@ -7,6 +7,10 @@ global:
   hyperfine:
     warmup: 1
     runs: 5
+    setup: ./scripts/setup.sh
+    conclude: ./scripts/conclude.sh
+    prepare: ./scripts/prepare.sh
+    cleanup: ./scripts/cleanup.sh
     export_json: results.json
     shell: /bin/bash
     show_output: false
@@ -30,7 +34,6 @@ global:
 
 # Local benchmark config.
 benchmarks:
-
   # benchmark name (required).
   - name: "Check bitcoind version"
 
@@ -41,23 +44,15 @@ benchmarks:
     # These override global hyperfine options in case of conflict.
     # Uses regular hyperfine syntax.
     hyperfine:
-
       # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
       # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} --version"
       warmup: 5
       runs: 10
 
-      # These have "sane" defaults in benchkit, but can point to any command or script too
-      # setup:
-      # conclude:
-      # prepare:
-      # cleanup:
-
       # A list of zero or more parameters.
       # These will be tried as a matrix.
       parameter_lists:
-
         # The variable name to use in hyperfine command substitution.
         - var: dbcache
           # A list of values to substitute in.
