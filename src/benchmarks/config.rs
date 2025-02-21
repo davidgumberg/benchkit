@@ -62,13 +62,14 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
 
         // For tmp_data_dir, create if not exists. For source, verify it exists
         if is_tmp {
+            debug!("Creating tmp directory: {:?}", path);
             std::fs::create_dir_all(&path)
                 .with_context(|| format!("Failed to create directory: {:?}", path))?;
+            debug!("Created tmp directory successfully");
         } else {
             path.canonicalize()
                 .with_context(|| format!("Failed to resolve path: {:?}", path))?;
         }
-
         Ok(())
     };
 

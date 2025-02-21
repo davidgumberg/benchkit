@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use log::{debug, info};
+use log::{debug, info, warn};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -41,7 +41,7 @@ impl Runner {
         run_id: Option<i32>,
     ) -> Result<Self> {
         let run_id = run_id.unwrap_or_else(Self::generate_run_id);
-        info!("No run_id specified. Generated random run_id: {}", run_id);
+        warn!("No run_id specified. Generated random run_id: {}", run_id);
 
         Ok(Self {
             app_config: app_config.clone(),
@@ -98,6 +98,7 @@ This can be downloaded with `benchkit snapshot download {}`",
 
     async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         info!("Running benchmark: {:?}", bench);
+
         // First read the global.commits field and expand commit hashes
         let mut full_commits = Vec::new();
         for commit in &self.bench_config.global.commits {
@@ -127,6 +128,21 @@ This can be downloaded with `benchkit snapshot download {}`",
             merged_hyperfine.extend(global_opts.clone());
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
+
+        // Create a temporary output directory
+        let out_dir = tempfile::TempDir::new()?.into_path();
+
+        // Add default hooks if not present
+        let hook_manager =
+            HookManager::new().with_context(|| "Failed to initialize hook manager")?;
+        hook_manager
+            .add_script_hooks(
+                &mut merged_hyperfine,
+                &bench.network,
+                self.bench_config.global.tmp_data_dir.clone(),
+                out_dir,
+            )
+            .with_context(|| "Failed to add default hooks")?;
 
         // Add commits to parameter-lists if not already present
         let param_lists = merged_hyperfine
@@ -161,14 +177,7 @@ This can be downloaded with `benchkit snapshot download {}`",
             *command = new_command;
         }
 
-        // Add default hooks if not present
-        let hook_manager =
-            HookManager::new_from_current().with_context(|| "Failed to initialize hook manager")?;
-        hook_manager
-            .add_default_hooks(&mut merged_hyperfine)
-            .with_context(|| "Failed to add default hooks")?;
-
-        // Get the export path before running hyperfine
+        // Check the export path before running hyperfine
         let export_path = merged_hyperfine
             .get("export_json")
             .and_then(Value::as_str)

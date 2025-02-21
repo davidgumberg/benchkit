@@ -32,8 +32,8 @@ fi
 
 # TODO: run parse_and_plot.py
 
-# Next we move datadir files
+# Next we move datadir files to the outdir
 mv "$1"/debug.log "$2"/
 
-# Clean datadir
-rm -Rf "${1:?}"
+# Clean datadir contents
+rm -Rf "${1:?}"/*

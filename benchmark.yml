@@ -8,12 +8,12 @@ global:
     warmup: 1
     runs: 5
     setup: ./scripts/setup.sh
-    conclude: ./scripts/conclude.sh
     prepare: ./scripts/prepare.sh
+    conclude: ./scripts/conclude.sh
     cleanup: ./scripts/cleanup.sh
     export_json: results.json
     shell: /bin/bash
-    show_output: false
+    show_output: true
 
   # A command to wrap the hyperfine command.
   wrapper: "taskset -c 1-14"
@@ -46,9 +46,9 @@ benchmarks:
     hyperfine:
       # The correct binary for the [commit] will be substituted and the (bitcoin) [network] applied automatically.
       # {dbcache} is an explicit (additional) parameterisation from [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} --version"
-      warmup: 5
-      runs: 10
+      command: "bitcoind -dbcache={dbcache} -stopatheight=1"
+      warmup: 0
+      runs: 1
 
       # A list of zero or more parameters.
       # These will be tried as a matrix.

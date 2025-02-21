@@ -1,72 +1,49 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-const DEFAULT_SCRIPTS: [(&str, &str); 4] = [
-    ("setup", "setup.sh"),
-    ("prepare", "prepare.sh"),
-    ("conclude", "conclude.sh"),
-    ("cleanup", "cleanup.sh"),
-];
-
-pub struct HookManager {
-    scripts_dir: PathBuf,
-}
+pub struct HookManager {}
 
 impl HookManager {
-    /// Get the current directory where the binary is running
-    fn get_base_dir() -> Result<PathBuf> {
-        env::current_dir().with_context(|| "Failed to get current directory")
-    }
-
     /// Create a new HookManager using the current directory as base
-    pub fn new_from_current() -> Result<Self> {
-        Ok(Self::new(&Self::get_base_dir()?))
-    }
-    pub fn new(base_dir: &Path) -> Self {
-        Self {
-            scripts_dir: base_dir.join("scripts"),
-        }
+    pub fn new() -> Result<Self> {
+        Ok(HookManager {})
     }
 
     /// Add default script hooks to the hyperfine options if they're not already present
-    pub fn add_default_hooks(&self, options: &mut HashMap<String, Value>) -> Result<()> {
-        // First verify scripts directory exists
-        if !self.scripts_dir.exists() {
-            anyhow::bail!(
-                "Scripts directory not found: {}",
-                self.scripts_dir.display()
-            );
-        }
+    pub fn add_script_hooks(
+        &self,
+        options: &mut HashMap<String, Value>,
+        network: &String,
+        tmp_data_dir: PathBuf,
+        out_dir: PathBuf,
+    ) -> Result<()> {
+        let hook_types = ["setup", "conclude", "prepare", "cleanup"];
+        // Check if we are using network "mainnet"
+        // If we are not, append the "network" to the data_dir_path
+        let modified_data_dir = if network == "mainnet" {
+            tmp_data_dir
+        } else {
+            tmp_data_dir.join(network)
+        };
 
-        // Add each default script if not already present
-        for (hook_name, script_path) in DEFAULT_SCRIPTS.iter() {
-            if !options.contains_key(*hook_name) {
-                let script = self.scripts_dir.join(script_path.trim_start_matches("./"));
+        for hook_type in hook_types.iter() {
+            if let Some(value) = options.get_mut(*hook_type) {
+                if let Some(script) = value.as_str() {
+                    // Construct the new script command with directories as arguments
+                    let new_script = format!(
+                        "{} {} {}",
+                        script,
+                        modified_data_dir.display(),
+                        out_dir.display()
+                    );
+                    debug!("Adding {hook_type} to options as: {new_script}");
 
-                // Verify script exists and is executable
-                if !script.exists() {
-                    anyhow::bail!("Script not found: {}", script.display());
+                    // Update the value in the options map
+                    *value = Value::String(new_script);
                 }
-
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let metadata = script.metadata().with_context(|| {
-                        format!("Failed to get metadata for {}", script.display())
-                    })?;
-                    let permissions = metadata.permissions();
-                    if permissions.mode() & 0o111 == 0 {
-                        anyhow::bail!("Script is not executable: {}", script.display());
-                    }
-                }
-
-                options.insert(
-                    hook_name.to_string(),
-                    Value::String(script.to_string_lossy().into_owned()),
-                );
             }
         }
 
