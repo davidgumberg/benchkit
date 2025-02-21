@@ -203,13 +203,14 @@ impl Builder {
         // Always set this as we apply patches but we don't want to commit
         // cmd.env("FORCE_DIRTY_WORKTREE", "1");
 
-        // Conditionally set environment variables if they exist
-        let env_vars = ["HOSTS", "SOURCES_PATH", "BASE_CACHE", "SDK_PATH"];
+        // Conditionally set some guix environment variables if they exist
+        let env_vars = ["SOURCES_PATH", "BASE_CACHE", "SDK_PATH"];
         for var in &env_vars {
             if let Ok(value) = std::env::var(var) {
                 cmd.env(var, value);
             }
         }
+        cmd.env("HOSTS", self.config.bench.global.host.clone());
 
         let status = cmd
             .status()
@@ -220,8 +221,11 @@ impl Builder {
         }
 
         let archive_path = self.config.bench.global.source.join(format!(
-            "guix-build-{}/output/x86_64-linux-gnu/bitcoin-{}-x86_64-linux-gnu.tar.gz",
-            short_patched_commit, short_patched_commit
+            "guix-build-{}/output/{}/bitcoin-{}-{}.tar.gz",
+            short_patched_commit,
+            self.config.bench.global.host,
+            short_patched_commit,
+            self.config.bench.global.host,
         ));
 
         let status = Command::new("tar")
@@ -234,17 +238,6 @@ impl Builder {
         if !status.success() {
             anyhow::bail!("Failed to extract archive for commit {}", patched_commit);
         }
-
-        // let status = Command::new("git")
-        //     .current_dir(&self.config.bench.global.source)
-        //     .arg("reset")
-        //     .arg("--hard")
-        //     .status()
-        //     .with_context(|| "Failed to reset uncommited patches after build")?;
-        //
-        // if !status.success() {
-        //     anyhow::bail!("Git restore failed.",);
-        // }
 
         Ok(())
     }

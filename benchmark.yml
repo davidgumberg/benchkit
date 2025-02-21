@@ -32,6 +32,9 @@ global:
   # A temporary datadir for Bitcoin Core to use
   tmp_data_dir: /tmp/benchkit
 
+  # The host architecture to build for
+  host: x86_64-linux-gnu
+
 # Local benchmark config.
 benchmarks:
   # benchmark name (required).

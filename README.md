@@ -42,8 +42,7 @@ export PGDATABASE=benchmarks
 export PGUSER=benchkit
 export PGPASSWORD=benchpass
 
-# Guix Build Configuration
-export HOSTS=x86_64-linux-gnu  # Important: Set this to your host architecture
+# Guix Build Caching Configuration
 export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
 export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
 export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
@@ -55,8 +54,6 @@ export SECRET_ACCESS_KEY=<your_password>
 # Logging
 export RUST_LOG=info
 ```
-
-**Important Note**: When building Bitcoin Core with Guix, you should set `HOSTS` to match your target architecture. This prevents unnecessary cross-compilation.
 
 ## Command Reference
 
@@ -143,6 +140,7 @@ global:
   branch: benchmark-test
   commits: ["62bd1960fdf", "e932c6168b5"]
   tmp_data_dir: /tmp/benchkit
+  host: x86_64-linux-gnu
 
 benchmarks:
   - name: "assumeutxo signet test sync"

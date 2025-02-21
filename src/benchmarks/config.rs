@@ -13,6 +13,7 @@ pub struct BenchmarkGlobalConfig {
     pub branch: String,
     pub commits: Vec<String>,
     pub tmp_data_dir: PathBuf,
+    pub host: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
