@@ -41,7 +41,7 @@ benchmarks:
     network: signet
 
     # An optional address for bitcoind to -connect to for sync
-    connect: 10.0.0.88
+    connect: 127.0.0.1:39333
 
     # Local hyperfine options.
     # These override global hyperfine options in case of conflict.

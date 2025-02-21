@@ -71,11 +71,12 @@ impl Builder {
         }
     }
 
-    fn build_commit(&self, commit: &str) -> Result<()> {
-        self.checkout_commit(commit)?;
-        self.apply_patches()?;
-        self.run_build(commit)?;
-        self.copy_binary(commit)?;
+    fn build_commit(&self, original_commit: &str) -> Result<()> {
+        self.checkout_commit(original_commit)?;
+        let patched_commit = self.apply_patches()?;
+        debug!("Commit hash after applying patches: {}", patched_commit);
+        self.run_build(patched_commit.as_str(), original_commit)?;
+        self.copy_binary(patched_commit.as_str(), original_commit)?;
         Ok(())
     }
 
@@ -93,8 +94,11 @@ impl Builder {
         Ok(())
     }
 
-    fn apply_patches(&self) -> Result<()> {
-        let patches = ["assumeutxo.patch", "guix.patch"];
+    fn apply_patches(&self) -> Result<String> {
+        let patches = [
+            "0001-guix-benchmarking-patches.patch",
+            "0001-validation-assumeutxo-benchmarking-patches.patch",
+        ];
 
         // Get the absolute path to the patches directory
         let patches_dir = std::env::current_dir()?.join("patches");
@@ -112,58 +116,45 @@ impl Builder {
             let patch_path = patches_dir.join(patch);
             info!("Applying patch: {}", patch_path.display());
 
-            // First try with -3 for git-apply to attempt 3-way merge
             let status = Command::new("git")
                 .current_dir(&self.config.bench.global.source)
-                .arg("apply")
-                .arg("-3")
-                .arg("--whitespace=fix")
+                .arg("-c")
+                .arg("user.name=temp")
+                .arg("-c")
+                .arg("user.email=temp@temp.com")
+                .arg("am")
+                .arg("--no-signoff")
                 .arg(patch_path.display().to_string())
                 .status()
-                .with_context(|| format!("Failed to execute git apply for patch {}", patch))?;
+                .with_context(|| format!("Failed to execute git am for patch {}", patch))?;
 
             if !status.success() {
-                // If 3-way merge fails, try to apply patch with --reject
-                warn!("3-way merge failed for {}, attempting with --reject", patch);
-
-                let status = Command::new("git")
+                // If patch application fails, abort the am session
+                let _ = Command::new("git")
                     .current_dir(&self.config.bench.global.source)
-                    .arg("apply")
-                    .arg("--reject")
-                    .arg("--whitespace=fix")
-                    .arg(patch_path.display().to_string())
-                    .status()
-                    .with_context(|| {
-                        format!("Failed to execute git apply --reject for patch {}", patch)
-                    })?;
+                    .arg("am")
+                    .arg("--abort")
+                    .status();
 
-                if !status.success() {
-                    anyhow::bail!("Failed to apply patch {} even with --reject", patch);
-                }
-
-                // Check for .rej files which indicate partial application
-                let output = Command::new("find")
-                    .current_dir(&self.config.bench.global.source)
-                    .arg(".")
-                    .arg("-name")
-                    .arg("*.rej")
-                    .output()
-                    .with_context(|| "Failed to search for .rej files")?;
-
-                if !output.stdout.is_empty() {
-                    let rej_files = String::from_utf8_lossy(&output.stdout);
-                    anyhow::bail!(
-                        "Patch {} was only partially applied. Review these .rej files:\n{}",
-                        patch,
-                        rej_files
-                    );
-                }
+                anyhow::bail!("Failed to apply patch {}", patch);
             }
 
             info!("Successfully applied patch: {}", patch);
         }
 
-        Ok(())
+        // Get the current commit hash after applying patches
+        let output = Command::new("git")
+            .current_dir(&self.config.bench.global.source)
+            .arg("rev-parse")
+            .arg("HEAD")
+            .output()
+            .context("Failed to get HEAD commit hash after applying patches")?;
+
+        if !output.status.success() {
+            anyhow::bail!("Failed to get HEAD commit hash after applying patches");
+        }
+
+        Ok(String::from_utf8(output.stdout)?.trim().to_string())
     }
 
     fn get_full_commit(&self, commit: &str) -> Result<String> {
@@ -189,8 +180,8 @@ impl Builder {
         Ok(String::from(&full_hash[..12]))
     }
 
-    fn run_build(&self, commit: &str) -> Result<()> {
-        let short_commit = self.get_full_commit(commit).unwrap();
+    fn run_build(&self, patched_commit: &str, original_commit: &str) -> Result<()> {
+        let short_patched_commit = self.get_full_commit(patched_commit).unwrap();
 
         // Create base command depending on CI environment
         let mut cmd = if std::env::var("CI").is_ok() {
@@ -210,7 +201,7 @@ impl Builder {
         };
 
         // Always set this as we apply patches but we don't want to commit
-        cmd.env("FORCE_DIRTY_WORKTREE", "1");
+        // cmd.env("FORCE_DIRTY_WORKTREE", "1");
 
         // Conditionally set environment variables if they exist
         let env_vars = ["HOSTS", "SOURCES_PATH", "BASE_CACHE", "SDK_PATH"];
@@ -222,15 +213,15 @@ impl Builder {
 
         let status = cmd
             .status()
-            .with_context(|| format!("Failed to run build for commit {}", commit))?;
+            .with_context(|| format!("Failed to run build for commit {}", patched_commit))?;
 
         if !status.success() {
-            anyhow::bail!("Build failed for commit {}", commit);
+            anyhow::bail!("Build failed for commit {}", patched_commit);
         }
 
         let archive_path = self.config.bench.global.source.join(format!(
             "guix-build-{}/output/x86_64-linux-gnu/bitcoin-{}-x86_64-linux-gnu.tar.gz",
-            short_commit, short_commit
+            short_patched_commit, short_patched_commit
         ));
 
         let status = Command::new("tar")
@@ -238,47 +229,59 @@ impl Builder {
             .arg("-xzf")
             .arg(&archive_path)
             .status()
-            .with_context(|| format!("Failed to extract archive for commit {}", commit))?;
+            .with_context(|| format!("Failed to extract archive for commit {}", patched_commit))?;
 
         if !status.success() {
-            anyhow::bail!("Failed to extract archive for commit {}", commit);
+            anyhow::bail!("Failed to extract archive for commit {}", patched_commit);
         }
 
-        let status = Command::new("git")
-            .current_dir(&self.config.bench.global.source)
-            .arg("reset")
-            .arg("--hard")
-            .status()
-            .with_context(|| "Failed to reset uncommited patches after build")?;
-
-        if !status.success() {
-            anyhow::bail!("Git restore failed.",);
-        }
+        // let status = Command::new("git")
+        //     .current_dir(&self.config.bench.global.source)
+        //     .arg("reset")
+        //     .arg("--hard")
+        //     .status()
+        //     .with_context(|| "Failed to reset uncommited patches after build")?;
+        //
+        // if !status.success() {
+        //     anyhow::bail!("Git restore failed.",);
+        // }
 
         Ok(())
     }
 
-    fn copy_binary(&self, commit: &str) -> Result<()> {
-        let short_commit = &self.get_full_commit(commit).unwrap()[..12];
+    fn copy_binary(&self, patched_commit: &str, original_commit: &str) -> Result<()> {
+        let short_patched_commit = &self.get_full_commit(patched_commit).unwrap()[..12];
+        // let short_original_commit = &self.get_full_commit(original_commit).unwrap()[..12];
         let src_path = self
             .config
             .bench
             .global
             .source
-            .join(format!("bitcoin-{}/bin/bitcoind", short_commit));
-        let dest_path = self.config.app.bin_dir.join(format!("bitcoind-{}", commit));
+            .join(format!("bitcoin-{}/bin/bitcoind", short_patched_commit));
+        let dest_path = self
+            .config
+            .app
+            .bin_dir
+            .join(format!("bitcoind-{}", original_commit));
+        debug!("Copying {src_path:?} to {dest_path:?}");
 
-        std::fs::copy(&src_path, &dest_path)
-            .with_context(|| format!("Failed to copy binary for commit {}", commit))?;
+        std::fs::copy(&src_path, &dest_path).with_context(|| {
+            format!("Failed to copy binary for commit {}", short_patched_commit)
+        })?;
 
         std::fs::remove_dir_all(
             self.config
                 .bench
                 .global
                 .source
-                .join(format!("bitcoin-{}", short_commit)),
+                .join(format!("bitcoin-{}", short_patched_commit)),
         )
-        .with_context(|| format!("Failed to cleanup extracted files for commit {}", commit))?;
+        .with_context(|| {
+            format!(
+                "Failed to cleanup extracted files for commit {}",
+                short_patched_commit
+            )
+        })?;
 
         Ok(())
     }
