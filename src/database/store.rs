@@ -79,7 +79,7 @@ async fn insert_benchmark(
         Duration::from_secs(5),
         client.query_one(
             "INSERT INTO benchmarks (name, command, pull_request_number, run_id) 
-            VALUES ($1, $2, $3, $4) RETURNING id",
+            VALUES ($1, $2, $3::bigint, $4::bigint) RETURNING id",
             &[&bench_name, &result.command, &pull_request_number, &run_id],
         ),
     )

@@ -35,7 +35,7 @@ global:
 # Local benchmark config.
 benchmarks:
   # benchmark name (required).
-  - name: "Check bitcoind version"
+  - name: "assumeutxo signet test sync"
 
     # Bitcoin network to run on (main, test, testnet4, signet, regtest)
     network: signet
@@ -50,7 +50,7 @@ benchmarks:
       # The correct binary for the [commit] will be substituted and the
       # (bitcoin) [network] applied automatically. {dbcache} is an explicit
       # (additional) parameterisation from [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} -stopatheight=1"
+      command: "bitcoind -dbcache={dbcache} -stopatheight=160001"
       warmup: 0
       runs: 1
 

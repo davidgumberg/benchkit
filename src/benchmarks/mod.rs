@@ -90,22 +90,34 @@ This can be downloaded with `benchkit snapshot download {}`",
             let new_command = command.replace(
                 "bitcoind",
                 &format!(
-                    "{}/bitcoind-{{commit}} -chain={} -datadir={}",
+                    "{}/bitcoind-{{commit}} -chain={} -datadir={} -connect={}",
                     self.config.app.bin_dir.display(),
                     bench.network,
                     self.config.bench.global.tmp_data_dir.display(),
+                    // TODO: handle if this is empty
+                    bench.connect.clone().unwrap().as_str(),
                 ),
             );
             *command = new_command;
         }
 
-        // Add script hooks
+        // Get the snapshot info and construct full path
+        let snapshot_path = if let Some(snapshot_info) = crate::download::SnapshotInfo::for_network(
+            &Network::from_str(&bench.network, true)
+                .map_err(|e| anyhow::anyhow!("{}", e))
+                .with_context(|| format!("Invalid network: {:?}", bench.network))?,
+        ) {
+            self.config.app.snapshot_dir.join(snapshot_info.filename)
+        } else {
+            self.config.app.snapshot_dir.clone() // Fallback to directory if no snapshot info
+        };
 
+        // Add script hooks
         let script_args = ScriptArgs {
             binary: format!("{}/bitcoind-{{commit}}", self.config.app.bin_dir.display()),
             connect_address: bench.connect.clone().unwrap_or_default(),
             network: bench.network.clone(),
-            snapshot_path: self.config.app.snapshot_dir.clone(),
+            snapshot_path,
             tmp_data_dir: self.config.bench.global.tmp_data_dir.clone(),
         };
         let hook_manager =

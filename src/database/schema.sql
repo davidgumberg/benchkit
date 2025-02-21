@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     command TEXT NOT NULL,
-    pull_request_number INTEGER,
-    run_id INTEGER,
+    pull_request_number BIGINT,
+    run_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

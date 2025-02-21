@@ -28,13 +28,13 @@ impl HookManager {
         script_args: ScriptArgs,
     ) -> Result<()> {
         let hook_types = ["setup", "conclude", "prepare", "cleanup"];
-        // Check if we are using network "mainnet"
-        // If we are not, append the "network" to the data_dir_path
-        let modified_data_dir = if script_args.network == "mainnet" {
-            script_args.tmp_data_dir
-        } else {
-            script_args.tmp_data_dir.join(&script_args.network)
-        };
+        // // Check if we are using network "mainnet"
+        // // If we are not, append the "network" to the data_dir_path
+        // let modified_data_dir = if script_args.network == "mainnet" {
+        //     script_args.tmp_data_dir
+        // } else {
+        //     script_args.tmp_data_dir.join(&script_args.network)
+        // };
 
         for hook_type in hook_types.iter() {
             if let Some(value) = options.get_mut(*hook_type) {
@@ -47,7 +47,7 @@ impl HookManager {
                         script_args.connect_address,
                         script_args.network,
                         script_args.snapshot_path.display(),
-                        modified_data_dir.display(),
+                        script_args.tmp_data_dir.display(),
                     );
                     debug!("Adding {hook_type} to options as: {new_script}");
 

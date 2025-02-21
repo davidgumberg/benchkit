@@ -16,8 +16,15 @@ if [ "$#" -ne 5 ]; then
     exit 1
 fi
 
+# BINARY="$1"
+# CONNECT_ADDRESS="$2"
+# NETWORK="$3"
+# SNAPSHOT_PATH="$4"
+TMP_DATADIR="$5"
+echo "TMP_DATADIR: ${TMP_DATADIR}"
+
 # Next we move datadir files to the outdir
-mv "$1"/debug.log "$2"/
+# mv "$5"/debug.log "$2"/
 
 # Clean tmp_data_dir contents
 rm -Rf "${5:?}"/*

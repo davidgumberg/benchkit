@@ -16,15 +16,20 @@ if [ "$#" -ne 5 ]; then
     exit 1
 fi
 
-# TODO: I think this should be binary, not bin-dir...
 BINARY="$1"
 CONNECT_ADDRESS="$2"
 NETWORK="$3"
 SNAPSHOT_PATH="$4"
 TMP_DATADIR="$5"
+echo "BINARY: ${BINARY}"
+echo "CONNECT_ADDRESS: ${CONNECT_ADDRESS}"
+echo "NETWORK: ${NETWORK}"
+echo "SNAPSHOT_PATH: ${SNAPSHOT_PATH}"
+echo "TMP_DATADIR: ${TMP_DATADIR}"
 
-# Use the pre-built binaries from BINARIES_DIR
-"${BINARY}" --help
+mkdir -p "${TMP_DATADIR}"
+rm -Rf "${TMP_DATADIR:?}/*"
+
 # TODO: Cheange print-to-console back
 taskset -c 0-15 "${BINARY}" -datadir="${TMP_DATADIR}" -connect="${CONNECT_ADDRESS}" -daemon=0 -chain="${NETWORK}" -stopatheight=1 -printtoconsole=1
 taskset -c 0-15 "${BINARY}" -datadir="${TMP_DATADIR}" -connect="${CONNECT_ADDRESS}" -daemon=0 -chain="${NETWORK}" -pausebackgroundsync=1 -loadutxosnapshot="${SNAPSHOT_PATH}" -printtoconsole=1 || true
