@@ -26,7 +26,6 @@ pub async fn store_results(
     db_url: &str,
     bench_name: &str,
     result_json: &str,
-    pull_request_number: i64,
     run_id: i64,
 ) -> Result<()> {
     let (client, connection) = timeout(
@@ -47,7 +46,7 @@ pub async fn store_results(
         .with_context(|| "Failed to parse benchmark results JSON")?;
 
     for result in &results.results {
-        store_benchmark_result(&client, bench_name, result, pull_request_number, run_id).await?;
+        store_benchmark_result(&client, bench_name, result, run_id).await?;
     }
 
     Ok(())
@@ -57,11 +56,9 @@ async fn store_benchmark_result(
     client: &Client,
     bench_name: &str,
     result: &BenchmarkResult,
-    pull_request_number: i64,
     run_id: i64,
 ) -> Result<()> {
-    let benchmark_id =
-        insert_benchmark(client, bench_name, result, pull_request_number, run_id).await?;
+    let benchmark_id = insert_benchmark(client, bench_name, result, run_id).await?;
     let run_id = insert_benchmark_run(client, benchmark_id, result).await?;
     insert_measurements(client, run_id, result).await?;
 
@@ -72,15 +69,14 @@ async fn insert_benchmark(
     client: &Client,
     bench_name: &str,
     result: &BenchmarkResult,
-    pull_request_number: i64,
     run_id: i64,
 ) -> Result<i32> {
     let benchmark_id: i32 = timeout(
         Duration::from_secs(5),
         client.query_one(
-            "INSERT INTO benchmarks (name, command, pull_request_number, run_id) 
+            "INSERT INTO benchmarks (name, command, run_id)
             VALUES ($1, $2, $3::bigint, $4::bigint) RETURNING id",
-            &[&bench_name, &result.command, &pull_request_number, &run_id],
+            &[&bench_name, &result.command, &run_id],
         ),
     )
     .await

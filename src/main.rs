@@ -42,10 +42,6 @@ struct Cli {
     /// Run ID
     #[arg(short, long, env = "BENCH_RUN_ID")]
     run_id: Option<i64>,
-
-    /// Pull Request number
-    #[arg(short, long, env = "BENCH_PR_NUMBER")]
-    pr_number: Option<i64>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -144,22 +140,16 @@ async fn main() -> Result<()> {
         process::exit(0);
     }
 
-    // If we didn't get a run_id or pr_number generate them now.
-    // The run_id in particular is used as a temporary directory for the run, collecting artifacts.
+    // If we didn't get a run_id generate a random one.
+    // The run_id is used as a temporary directory for the run, collecting artifacts.
     let run_id = cli.run_id.unwrap_or_else(|| {
         let id = generate_id(false);
         warn!("No run_id specified. Generated random run_id: {}", id);
         id
     });
 
-    let pr_number = cli.pr_number.unwrap_or_else(|| {
-        let id = generate_id(true);
-        warn!("No PR number specified. Generated random PR number: {}", id);
-        id
-    });
-
     let app: AppConfig = load_app_config(&cli.app_config)?;
-    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config, run_id, pr_number)?;
+    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config, run_id)?;
     let config = GlobalConfig { app, bench };
 
     match &cli.command {

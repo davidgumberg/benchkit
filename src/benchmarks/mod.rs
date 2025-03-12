@@ -177,7 +177,6 @@ This can be downloaded with `benchkit snapshot download {}`",
             &self.config.app.database.connection_string(),
             &bench.name,
             &results_json,
-            self.config.bench.pr_number,
             self.config.bench.run_id,
         )
         .await?;

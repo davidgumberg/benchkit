@@ -29,7 +29,6 @@ pub struct BenchmarkConfig {
     pub global: BenchmarkGlobalConfig,
     pub benchmarks: Vec<SingleConfig>,
     pub run_id: i64,
-    pub pr_number: i64,
 }
 
 fn expand_path(path: &str) -> String {
@@ -38,11 +37,7 @@ fn expand_path(path: &str) -> String {
         .into_owned()
 }
 
-pub fn load_bench_config(
-    bench_config_path: &PathBuf,
-    run_id: i64,
-    pr_number: i64,
-) -> Result<BenchmarkConfig> {
+pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<BenchmarkConfig> {
     if !bench_config_path.exists() {
         anyhow::bail!("Config file not found: {:?}", bench_config_path);
     }
@@ -54,7 +49,7 @@ pub fn load_bench_config(
     let contents = std::fs::read_to_string(bench_config_path)
         .with_context(|| format!("Failed to read config file: {:?}", bench_config_path))?;
 
-    // First deserialize into a temporary structure without run_id and pr_number
+    // First deserialize into a temporary structure without run_id
     #[derive(Deserialize)]
     struct TempConfig {
         global: BenchmarkGlobalConfig,
@@ -64,12 +59,11 @@ pub fn load_bench_config(
     let temp_config: TempConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {:?}", bench_config_path))?;
 
-    // Create the final config with run_id and pr_number
+    // Create the final config with run_id
     let mut config = BenchmarkConfig {
         global: temp_config.global,
         benchmarks: temp_config.benchmarks,
         run_id,
-        pr_number,
     };
 
     // Helper closure to process paths
