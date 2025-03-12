@@ -10,7 +10,6 @@ pub struct BenchmarkGlobalConfig {
     pub hyperfine: Option<HashMap<String, Value>>,
     pub wrapper: Option<String>,
     pub source: PathBuf,
-    pub branch: String,
     pub commits: Vec<String>,
     pub tmp_data_dir: PathBuf,
     pub host: String,

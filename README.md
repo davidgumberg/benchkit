@@ -144,7 +144,6 @@ global:
 
   wrapper: "taskset -c 1-14"
   source: $HOME/src/core/bitcoin
-  branch: benchmark-test
   commits: ["62bd1960fdf", "e932c6168b5"]
   tmp_data_dir: /tmp/benchkit
   host: x86_64-linux-gnu

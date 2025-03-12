@@ -22,11 +22,7 @@ global:
   # Can point to a local or online fork of bitcoin/bitcoin.
   source: $HOME/src/core/bitcoin
 
-  # Which branch of the source to check out (required).
-  branch: benchmark-test
-
   # Commits to build binaries from (required).
-  # A list of one or more all found in <branch>
   commits: ["62bd1960fdf", "82f89cf41d5"]
 
   # A temporary datadir for Bitcoin Core to use
