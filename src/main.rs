@@ -113,6 +113,8 @@ enum SnapshotCommands {
 
 #[derive(Subcommand, Debug)]
 enum PatchCommands {
+    /// Downloade latest patches from GitHub
+    Update {},
     /// Test the patches will apply cleanly
     Test {},
 }
@@ -148,7 +150,7 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Build {} => {
             let builder = benchmarks::Builder::new(config.clone())?;
-            builder.build()?;
+            builder.build().await?;
         }
         Commands::Db { command } => match command {
             DbCommands::Init => {
@@ -164,7 +166,7 @@ async fn main() -> Result<()> {
         Commands::Run { name, out_dir } => {
             // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;
-            builder.build()?;
+            builder.build().await?;
 
             // Run stage
             let runner = benchmarks::Runner::new(
@@ -187,7 +189,11 @@ async fn main() -> Result<()> {
         Commands::Patch { command } => match command {
             PatchCommands::Test {} => {
                 let builder = benchmarks::Builder::new(config.clone())?;
-                builder.test_patch_commits()?;
+                builder.test_patch_commits().await?;
+            }
+            PatchCommands::Update {} => {
+                let builder = benchmarks::Builder::new(config.clone())?;
+                builder.update_patches(true).await?;
             }
         },
         // Commands::S3 {} => {

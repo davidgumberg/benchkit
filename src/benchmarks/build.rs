@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
+use std::path::PathBuf;
 use std::process::Command;
 
 use crate::config::GlobalConfig;
 
 pub struct Builder {
     config: GlobalConfig,
+    patches: Vec<String>,
 }
 
 impl Builder {
@@ -16,7 +18,11 @@ impl Builder {
                 config.bench.global.source.display()
             );
         }
-        Ok(Self { config })
+        let patches = vec![
+            "0001-guix-benchmarking-patches.patch".to_string(),
+            "0001-validation-assumeutxo-benchmarking-patches.patch".to_string(),
+        ];
+        Ok(Self { config, patches })
     }
 
     fn binary_exists(&self, commit: &str) -> bool {
@@ -32,14 +38,14 @@ impl Builder {
         }
     }
 
-    pub fn build(&self) -> Result<()> {
+    pub async fn build(&self) -> Result<()> {
         self.check_clean_worktree()?;
         let initial_ref = self.get_initial_ref()?;
 
         for commit in &self.config.bench.global.commits {
             if !self.binary_exists(commit) {
                 info!("Building binary for commit {}", commit);
-                self.build_commit(commit)?;
+                self.build_commit(commit).await?;
             }
         }
 
@@ -95,21 +101,21 @@ impl Builder {
         }
     }
 
-    fn build_commit(&self, original_commit: &str) -> Result<()> {
+    async fn build_commit(&self, original_commit: &str) -> Result<()> {
         self.checkout_commit(original_commit)?;
-        let patched_commit = self.apply_patches()?;
+        let patched_commit = self.apply_patches().await?;
         debug!("Commit hash after applying patches: {}", patched_commit);
         self.run_build(patched_commit.as_str())?;
         self.copy_binary(patched_commit.as_str(), original_commit)?;
         Ok(())
     }
 
-    pub fn test_patch_commits(&self) -> Result<()> {
+    pub async fn test_patch_commits(&self) -> Result<()> {
         self.check_clean_worktree()?;
         let initial_ref = self.get_initial_ref()?;
         for commit in &self.config.bench.global.commits {
             self.checkout_commit(commit)?;
-            self.test_patches()?;
+            self.test_patches().await?;
         }
         self.restore_git_state(&initial_ref)?;
         Ok(())
@@ -129,8 +135,8 @@ impl Builder {
         Ok(())
     }
 
-    fn apply_patches(&self) -> Result<String> {
-        self.process_patches(false)?;
+    async fn apply_patches(&self) -> Result<String> {
+        self.process_patches(false).await?;
 
         // Get the current commit hash after applying patches
         let output = Command::new("git")
@@ -147,21 +153,60 @@ impl Builder {
         Ok(String::from_utf8(output.stdout)?.trim().to_string())
     }
 
-    fn test_patches(&self) -> Result<()> {
-        self.process_patches(true)
+    async fn test_patches(&self) -> Result<()> {
+        self.process_patches(true).await
     }
 
-    fn process_patches(&self, check_only: bool) -> Result<()> {
-        let patches = [
-            "0001-guix-benchmarking-patches.patch",
-            "0001-validation-assumeutxo-benchmarking-patches.patch",
-        ];
+    async fn download_patch(&self, patch_name: &str, patches_dir: &PathBuf) -> Result<()> {
+        let client = reqwest::Client::new();
+        let url = format!(
+            "https://raw.githubusercontent.com/bitcoin-dev-tools/benchkit/master/patches/{}",
+            patch_name
+        );
+        let response = client.get(&url).send().await?;
 
-        // Get the absolute path to the patches directory
-        let patches_dir = std::env::current_dir()?.join("patches");
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Failed to download patch {}: {}",
+                patch_name,
+                response.status()
+            );
+        }
 
-        // First verify all patches exist
-        for patch in &patches {
+        let content = response.bytes().await?;
+        let patch_path = patches_dir.join(patch_name);
+
+        // Ensure the patches directory exists
+        if !patches_dir.exists() {
+            tokio::fs::create_dir_all(patches_dir).await?;
+        }
+
+        tokio::fs::write(&patch_path, content).await?;
+        info!("Successfully downloaded patch: {}", patch_name);
+        Ok(())
+    }
+
+    pub async fn update_patches(&self, force: bool) -> Result<()> {
+        for patch in &self.patches {
+            let patch_path = &self.config.app.patch_dir.join(patch);
+            if !patch_path.exists() || force {
+                info!("Downloading patch: {patch}");
+                self.download_patch(patch, &self.config.app.patch_dir)
+                    .await?;
+            } else {
+                info!("Patch {patch} already exists, skipping download");
+            }
+        }
+        Ok(())
+    }
+
+    async fn process_patches(&self, check_only: bool) -> Result<()> {
+        self.update_patches(false).await?;
+
+        let patches_dir = &self.config.app.patch_dir;
+
+        // Verify all patches exist
+        for patch in &self.patches {
             let patch_path = patches_dir.join(patch);
             if !patch_path.exists() {
                 anyhow::bail!("Patch file not found: {}", patch_path.display());
@@ -169,7 +214,7 @@ impl Builder {
         }
 
         // Apply each patch
-        for patch in &patches {
+        for patch in &self.patches {
             let patch_path = patches_dir.join(patch);
             let operation = if check_only { "Testing" } else { "Applying" };
             info!("{} patch: {}", operation, patch_path.display());

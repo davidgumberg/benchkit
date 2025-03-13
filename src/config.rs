@@ -9,10 +9,11 @@ use crate::{benchmarks::BenchmarkConfig, database::DatabaseConfig};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
-    pub home_dir: PathBuf,
     pub bin_dir: PathBuf,
-    pub snapshot_dir: PathBuf,
     pub database: DatabaseConfig,
+    pub home_dir: PathBuf,
+    pub patch_dir: PathBuf,
+    pub snapshot_dir: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -49,11 +50,14 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
     config.bin_dir = PathBuf::from(expanded_bin_dir);
     let expanded_snapshot_dir = expand_path(config.snapshot_dir.to_str().unwrap_or(""));
     config.snapshot_dir = PathBuf::from(expanded_snapshot_dir);
+    let expanded_patch_dir = expand_path(config.patch_dir.to_str().unwrap_or(""));
+    config.patch_dir = PathBuf::from(expanded_patch_dir);
 
     // Resolve relative paths to absolute paths and create directories
     for path in [
         &mut config.bin_dir,
         &mut config.home_dir,
+        &mut config.patch_dir,
         &mut config.snapshot_dir,
     ]
     .iter_mut()
