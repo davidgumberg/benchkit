@@ -1,9 +1,8 @@
 use anyhow::{bail, Context, Result};
-use log::{error, info};
+use log::{debug, info};
+use postgres::{Client, NoTls};
 use serde::Deserialize;
 use std::{io, process::Command};
-use tokio::time::{timeout, Duration};
-use tokio_postgres::NoTls;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseConfig {
@@ -23,7 +22,7 @@ impl DatabaseConfig {
     }
 }
 
-pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
+pub fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
     info!("Initializing database...");
     check_postgres_running()?;
 
@@ -39,18 +38,8 @@ pub async fn initialize_database(db_conf: &DatabaseConfig) -> Result<()> {
         grant_privileges(&db_conf.database, &db_conf.user)?;
     }
 
-    let (client, connection) = tokio_postgres::connect(&db_conf.connection_string(), NoTls)
-        .await
-        .with_context(|| "Failed to connect to database")?;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("connection error: {}", e);
-        }
-    });
-
-    client.batch_execute(include_str!("schema.sql")).await?;
-
+    let mut client = Client::connect(&db_conf.connection_string(), NoTls)?;
+    client.batch_execute(include_str!("schema.sql"))?;
     info!("Database setup completed successfully");
     Ok(())
 }
@@ -187,7 +176,7 @@ fn grant_privileges(database: &str, user: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn delete_database_interactive(db_config: &DatabaseConfig) -> Result<()> {
+pub fn delete_database_interactive(db_config: &DatabaseConfig) -> Result<()> {
     println!("⚠️  WARNING: You are about to delete:");
     println!("  Database: {}", db_config.database);
     println!("  User: {}", db_config.user);
@@ -198,14 +187,14 @@ pub async fn delete_database_interactive(db_config: &DatabaseConfig) -> Result<(
     io::stdin().read_line(&mut input)?;
 
     if input.trim().to_lowercase() == "yes" {
-        delete_database(db_config).await?;
+        delete_database(db_config)?;
     } else {
         bail!("Database deletion cancelled.");
     }
     Ok(())
 }
 
-async fn delete_database(config: &DatabaseConfig) -> Result<()> {
+fn delete_database(config: &DatabaseConfig) -> Result<()> {
     info!("Deleting database...");
     check_postgres_running()?;
 
@@ -275,20 +264,11 @@ fn drop_user(user: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn check_connection(db_conf: &DatabaseConfig) -> Result<()> {
-    let (client, connection) = tokio_postgres::connect(&db_conf.connection_string(), NoTls)
-        .await
-        .with_context(|| "Failed to establish database connection")?;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("connection error: {}", e);
-        }
-    });
-
-    timeout(Duration::from_secs(5), client.execute("SELECT 1", &[]))
-        .await
-        .with_context(|| "Database query timeout")?
+pub fn check_connection(db_conf: &DatabaseConfig) -> Result<()> {
+    debug!("Testing connection to postgres db");
+    let mut client = Client::connect(&db_conf.connection_string(), NoTls)?;
+    client
+        .execute("SELECT 1", &[])
         .with_context(|| "Failed to execute test query")?;
     info!("Successfully connected to database");
 

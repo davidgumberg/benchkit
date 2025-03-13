@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
+use postgres::{Client, NoTls};
 use serde::Deserialize;
-use tokio::time::{timeout, Duration};
-use tokio_postgres::{Client, NoTls};
 
 #[derive(Deserialize, Debug)]
 struct BenchmarkResult {
@@ -22,79 +21,57 @@ struct Results {
     results: Vec<BenchmarkResult>,
 }
 
-pub async fn store_results(
-    db_url: &str,
-    bench_name: &str,
-    result_json: &str,
-    run_id: i64,
-) -> Result<()> {
-    let (client, connection) = timeout(
-        Duration::from_secs(5),
-        tokio_postgres::connect(db_url, NoTls),
-    )
-    .await
-    .with_context(|| "Database connection timeout")?
-    .with_context(|| "Failed to connect to database")?;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            log::error!("connection error: {}", e);
-        }
-    });
+pub fn store_results(db_url: &str, bench_name: &str, result_json: &str, run_id: i64) -> Result<()> {
+    let mut client = Client::connect(db_url, NoTls)?;
 
     let results: Results = serde_json::from_str(result_json)
         .with_context(|| "Failed to parse benchmark results JSON")?;
 
     for result in &results.results {
-        store_benchmark_result(&client, bench_name, result, run_id).await?;
+        store_benchmark_result(&mut client, bench_name, result, run_id)?;
     }
 
     Ok(())
 }
 
-async fn store_benchmark_result(
-    client: &Client,
+fn store_benchmark_result(
+    client: &mut Client,
     bench_name: &str,
     result: &BenchmarkResult,
     run_id: i64,
 ) -> Result<()> {
-    let benchmark_id = insert_benchmark(client, bench_name, result, run_id).await?;
-    let run_id = insert_benchmark_run(client, benchmark_id, result).await?;
-    insert_measurements(client, run_id, result).await?;
+    let benchmark_id = insert_benchmark(client, bench_name, result, run_id)?;
+    let run_id = insert_benchmark_run(client, benchmark_id, result)?;
+    insert_measurements(client, run_id, result)?;
 
     Ok(())
 }
 
-async fn insert_benchmark(
-    client: &Client,
+fn insert_benchmark(
+    client: &mut Client,
     bench_name: &str,
     result: &BenchmarkResult,
     run_id: i64,
 ) -> Result<i32> {
-    let benchmark_id: i32 = timeout(
-        Duration::from_secs(5),
-        client.query_one(
+    let benchmark_id: i32 = client
+        .query_one(
             "INSERT INTO benchmarks (name, command, run_id)
             VALUES ($1, $2, $3::bigint, $4::bigint) RETURNING id",
             &[&bench_name, &result.command, &run_id],
-        ),
-    )
-    .await
-    .with_context(|| "Timeout inserting benchmark")?
-    .with_context(|| "Failed to insert benchmark")?
-    .get(0);
+        )
+        .with_context(|| "Failed to insert benchmark")?
+        .get(0);
 
     Ok(benchmark_id)
 }
 
-async fn insert_benchmark_run(
-    client: &Client,
+fn insert_benchmark_run(
+    client: &mut Client,
     benchmark_id: i32,
     result: &BenchmarkResult,
 ) -> Result<i32> {
-    let run_id: i32 = timeout(
-        Duration::from_secs(5),
-        client.query_one(
+    let run_id: i32 = client
+        .query_one(
             "INSERT INTO runs (
                 benchmark_id, mean, stddev, median, user_time,
                 system_time, min_time, max_time
@@ -109,35 +86,28 @@ async fn insert_benchmark_run(
                 &result.min,
                 &result.max,
             ],
-        ),
-    )
-    .await
-    .with_context(|| "Timeout inserting benchmark run")?
-    .with_context(|| "Failed to insert benchmark run")?
-    .get(0);
+        )
+        .with_context(|| "Failed to insert benchmark run")?
+        .get(0);
 
     Ok(run_id)
 }
 
-async fn insert_measurements(client: &Client, run_id: i32, result: &BenchmarkResult) -> Result<()> {
+fn insert_measurements(client: &mut Client, run_id: i32, result: &BenchmarkResult) -> Result<()> {
     for (idx, (time, exit_code)) in result
         .times
         .iter()
         .zip(result.exit_codes.iter())
         .enumerate()
     {
-        timeout(
-            Duration::from_secs(5),
-            client.execute(
+        client
+            .execute(
                 "INSERT INTO measurements (
-                    benchmark_run_id, execution_time, exit_code, measurement_order
-                ) VALUES ($1, $2, $3, $4)",
+                benchmark_run_id, execution_time, exit_code, measurement_order
+            ) VALUES ($1, $2, $3, $4)",
                 &[&run_id, time, exit_code, &(idx as i32)],
-            ),
-        )
-        .await
-        .with_context(|| "Timeout inserting measurement")?
-        .with_context(|| "Failed to insert measurement")?;
+            )
+            .with_context(|| "Failed to insert measurement")?;
     }
 
     Ok(())

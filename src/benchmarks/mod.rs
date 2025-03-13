@@ -48,7 +48,7 @@ impl Runner {
         Ok(Self { config, out_dir })
     }
 
-    pub async fn run(&self, name: Option<&str>) -> Result<()> {
+    pub fn run(&self, name: Option<&str>) -> Result<()> {
         let benchmarks = match name {
             Some(n) => {
                 let bench = self
@@ -65,14 +65,13 @@ impl Runner {
 
         for bench in benchmarks {
             // TODO: Remove this check to enable runs without AssumeUTXO
-            self.check_snapshot(bench, &self.config.app.snapshot_dir)
-                .await?;
-            self.run_benchmark(bench).await?;
+            self.check_snapshot(bench, &self.config.app.snapshot_dir)?;
+            self.run_benchmark(bench)?;
         }
         Ok(())
     }
 
-    async fn check_snapshot(&self, bench: &SingleConfig, snapshot_dir: &Path) -> Result<()> {
+    fn check_snapshot(&self, bench: &SingleConfig, snapshot_dir: &Path) -> Result<()> {
         // Check if we have the correct snapshot
         let network = Network::from_str(&bench.network, true)
             .map_err(|e| anyhow::anyhow!("{}", e))
@@ -94,7 +93,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         Ok(())
     }
 
-    async fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
+    fn run_benchmark(&self, bench: &SingleConfig) -> Result<()> {
         info!("Running benchmark: {:?}", bench);
 
         // Merge hyperfine options from global and benchmark configs

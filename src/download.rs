@@ -1,11 +1,10 @@
 use crate::types::Network;
-use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
-use reqwest::Client;
+use reqwest::blocking::Client;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Debug)]
 pub struct SnapshotInfo {
@@ -33,7 +32,7 @@ impl SnapshotInfo {
 
 const SNAPSHOT_HOST: &str = "https://utxo.download/";
 
-pub async fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow::Result<()> {
+pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow::Result<()> {
     let snapshot_info = SnapshotInfo::for_network(network)
         .ok_or_else(|| anyhow::anyhow!("No snapshot available for network {:?}", network))?;
     let filename = snapshot_info.filename;
@@ -44,7 +43,7 @@ pub async fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow
     info!("Downloading {url} to {filepath:?}");
 
     // Get the content length for the progress bar
-    let response = client.get(&url).send().await?;
+    let response = client.get(&url).send()?;
     let total_size = response.content_length().unwrap_or(0);
 
     let pb = ProgressBar::new(total_size);
@@ -55,16 +54,12 @@ pub async fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow
             // .progress_chars("█▓▒░  "),
             .progress_chars("⟨⟨⟨⟨⟨····· "),
     );
-    let mut file = File::create(&filepath).await?;
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        file.write_all(&chunk).await?;
-        downloaded += chunk.len() as u64;
-        pb.set_position(downloaded);
-    }
+    
+    let mut file = File::create(&filepath)?;
+    let content = response.bytes()?;
+    file.write_all(&content)?;
+    pb.set_position(content.len() as u64);
+    
     pb.finish();
     info!("Successfully downloaded {filepath:?}");
     Ok(())

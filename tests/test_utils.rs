@@ -1,15 +1,15 @@
 use anyhow::Result;
+use postgres::{Client, NoTls};
 use rand::Rng;
-use tokio_postgres::NoTls;
 
 pub struct TestDb {
     db_name: String,
 }
 
 impl TestDb {
-    pub async fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let db_name = format!("benchkittest_{}", random_suffix());
-        Self::create_database(&db_name).await?;
+        Self::create_database(&db_name)?;
         Ok(Self { db_name })
     }
 
@@ -20,7 +20,7 @@ impl TestDb {
         )
     }
 
-    async fn create_database(db_name: &str) -> Result<()> {
+    fn create_database(db_name: &str) -> Result<()> {
         let mut create = std::process::Command::new("sudo");
         create.arg("-u").arg("postgres").args([
             "psql",
@@ -31,22 +31,12 @@ impl TestDb {
         println!("Creating new test database with command:\n{:?}", &create);
         create.output()?;
 
-        let (client, connection) = tokio_postgres::connect(
+        let mut client = Client::connect(
             &format!("postgres://benchkittest:benchkitpw@localhost/{}", db_name),
             NoTls,
-        )
-        .await?;
+        )?;
 
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("connection error: {}", e);
-            }
-        });
-
-        client
-            .batch_execute(include_str!("../src/database/schema.sql"))
-            .await?;
-
+        client.batch_execute(include_str!("../src/database/schema.sql"))?;
         Ok(())
     }
 }

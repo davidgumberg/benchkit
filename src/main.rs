@@ -119,8 +119,7 @@ enum PatchCommands {
     Test {},
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
 
@@ -150,23 +149,23 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Build {} => {
             let builder = benchmarks::Builder::new(config.clone())?;
-            builder.build().await?;
+            builder.build()?;
         }
         Commands::Db { command } => match command {
             DbCommands::Init => {
-                database::initialize_database(&config.app.database).await?;
+                database::initialize_database(&config.app.database)?;
             }
             DbCommands::Test => {
-                database::check_connection(&config.app.database).await?;
+                database::check_connection(&config.app.database)?;
             }
             DbCommands::Delete => {
-                database::delete_database_interactive(&config.app.database).await?;
+                database::delete_database_interactive(&config.app.database)?;
             }
         },
         Commands::Run { name, out_dir } => {
             // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;
-            builder.build().await?;
+            builder.build()?;
 
             // Run stage
             let runner = benchmarks::Runner::new(
@@ -175,7 +174,7 @@ async fn main() -> Result<()> {
                 &cli.app_config,
                 &cli.bench_config,
             )?;
-            runner.run(name.as_deref()).await?;
+            runner.run(name.as_deref())?;
             info!(
                 "{} completed successfully.",
                 name.as_deref().unwrap_or("All benchmarks")
@@ -183,17 +182,17 @@ async fn main() -> Result<()> {
         }
         Commands::Snapshot { command } => match command {
             SnapshotCommands::Download { network } => {
-                download_snapshot(network, &config.app.snapshot_dir).await?;
+                download_snapshot(network, &config.app.snapshot_dir)?;
             }
         },
         Commands::Patch { command } => match command {
             PatchCommands::Test {} => {
                 let builder = benchmarks::Builder::new(config.clone())?;
-                builder.test_patch_commits().await?;
+                builder.test_patch_commits()?;
             }
             PatchCommands::Update {} => {
                 let builder = benchmarks::Builder::new(config.clone())?;
-                builder.update_patches(true).await?;
+                builder.update_patches(true)?;
             }
         },
         // Commands::S3 {} => {

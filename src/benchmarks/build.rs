@@ -38,14 +38,14 @@ impl Builder {
         }
     }
 
-    pub async fn build(&self) -> Result<()> {
+    pub fn build(&self) -> Result<()> {
         self.check_clean_worktree()?;
         let initial_ref = self.get_initial_ref()?;
 
         for commit in &self.config.bench.global.commits {
             if !self.binary_exists(commit) {
                 info!("Building binary for commit {}", commit);
-                self.build_commit(commit).await?;
+                self.build_commit(commit)?;
             }
         }
 
@@ -101,21 +101,21 @@ impl Builder {
         }
     }
 
-    async fn build_commit(&self, original_commit: &str) -> Result<()> {
+    fn build_commit(&self, original_commit: &str) -> Result<()> {
         self.checkout_commit(original_commit)?;
-        let patched_commit = self.apply_patches().await?;
+        let patched_commit = self.apply_patches()?;
         debug!("Commit hash after applying patches: {}", patched_commit);
         self.run_build(patched_commit.as_str())?;
         self.copy_binary(patched_commit.as_str(), original_commit)?;
         Ok(())
     }
 
-    pub async fn test_patch_commits(&self) -> Result<()> {
+    pub fn test_patch_commits(&self) -> Result<()> {
         self.check_clean_worktree()?;
         let initial_ref = self.get_initial_ref()?;
         for commit in &self.config.bench.global.commits {
             self.checkout_commit(commit)?;
-            self.test_patches().await?;
+            self.test_patches()?;
         }
         self.restore_git_state(&initial_ref)?;
         Ok(())
@@ -135,8 +135,8 @@ impl Builder {
         Ok(())
     }
 
-    async fn apply_patches(&self) -> Result<String> {
-        self.process_patches(false).await?;
+    fn apply_patches(&self) -> Result<String> {
+        self.process_patches(false)?;
 
         // Get the current commit hash after applying patches
         let output = Command::new("git")
@@ -153,17 +153,17 @@ impl Builder {
         Ok(String::from_utf8(output.stdout)?.trim().to_string())
     }
 
-    async fn test_patches(&self) -> Result<()> {
-        self.process_patches(true).await
+    fn test_patches(&self) -> Result<()> {
+        self.process_patches(true)
     }
 
-    async fn download_patch(&self, patch_name: &str, patches_dir: &PathBuf) -> Result<()> {
-        let client = reqwest::Client::new();
+    fn download_patch(&self, patch_name: &str, patches_dir: &PathBuf) -> Result<()> {
+        let client = reqwest::blocking::Client::new();
         let url = format!(
             "https://raw.githubusercontent.com/bitcoin-dev-tools/benchkit/master/patches/{}",
             patch_name
         );
-        let response = client.get(&url).send().await?;
+        let response = client.get(&url).send()?;
 
         if !response.status().is_success() {
             anyhow::bail!(
@@ -173,26 +173,25 @@ impl Builder {
             );
         }
 
-        let content = response.bytes().await?;
+        let content = response.bytes()?;
         let patch_path = patches_dir.join(patch_name);
 
         // Ensure the patches directory exists
         if !patches_dir.exists() {
-            tokio::fs::create_dir_all(patches_dir).await?;
+            std::fs::create_dir_all(patches_dir)?;
         }
 
-        tokio::fs::write(&patch_path, content).await?;
+        std::fs::write(&patch_path, content)?;
         info!("Successfully downloaded patch: {}", patch_name);
         Ok(())
     }
 
-    pub async fn update_patches(&self, force: bool) -> Result<()> {
+    pub fn update_patches(&self, force: bool) -> Result<()> {
         for patch in &self.patches {
             let patch_path = &self.config.app.patch_dir.join(patch);
             if !patch_path.exists() || force {
                 info!("Downloading patch: {patch}");
-                self.download_patch(patch, &self.config.app.patch_dir)
-                    .await?;
+                self.download_patch(patch, &self.config.app.patch_dir)?;
             } else {
                 info!("Patch {patch} already exists, skipping download");
             }
@@ -200,8 +199,8 @@ impl Builder {
         Ok(())
     }
 
-    async fn process_patches(&self, check_only: bool) -> Result<()> {
-        self.update_patches(false).await?;
+    fn process_patches(&self, check_only: bool) -> Result<()> {
+        self.update_patches(false)?;
 
         let patches_dir = &self.config.app.patch_dir;
 
