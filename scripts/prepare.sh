@@ -3,30 +3,15 @@ set -e
 echo "Running prepare.sh"
 
 # Scripts always recieve the same arguments from benchkit in the same order:
-#
-# pub struct ScriptArgs {
-#     pub binary: String,
-#     pub connect_address: String,
-#     pub network: String,
-#     pub snapshot_path: PathBuf,
-#     pub tmp_data_dir: PathBuf,
-# }
-
-if [ "$#" -ne 5 ]; then
-    echo "Error: Required arguments missing"
-    exit 1
-fi
 
 BINARY="$1"
 CONNECT_ADDRESS="$2"
 NETWORK="$3"
-SNAPSHOT_PATH="$4"
-TMP_DATADIR="$5"
-# echo "BINARY: ${BINARY}"
-# echo "CONNECT_ADDRESS: ${CONNECT_ADDRESS}"
-# echo "NETWORK: ${NETWORK}"
-# echo "SNAPSHOT_PATH: ${SNAPSHOT_PATH}"
-# echo "TMP_DATADIR: ${TMP_DATADIR}"
+# OUT_DIR="$4"
+SNAPSHOT_PATH="$5"
+TMP_DATADIR="$6"
+# ITERATION="$7"
+# COMMIT="$8"
 
 mkdir -p "${TMP_DATADIR}"
 rm -Rf "${TMP_DATADIR:?}/*"

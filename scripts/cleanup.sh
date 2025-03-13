@@ -3,20 +3,14 @@ set -e
 echo "Running cleanup.sh"
 
 # Scripts always recieve the same arguments from benchkit in the same order:
-#
-# pub struct ScriptArgs {
-#     pub binary: String,
-#     pub connect_address: String,
-#     pub network: String,
-#     pub snapshot_path: PathBuf,
-#     pub tmp_data_dir: PathBuf,
-# }
 
-if [ "$#" -ne 5 ]; then
-    echo "Error: Required arguments missing"
-    exit 1
-fi
-
-TMP_DATADIR="$5"
+# BINARY="$1"
+# CONNECT_ADDRESS="$2"
+# NETWORK="$3"
+# OUT_DIR="$4"
+# SNAPSHOT_PATH="$5"
+TMP_DATADIR="$6"
+# ITERATION="$7"
+# COMMIT="$8"
 
 rm -Rf "${TMP_DATADIR:?}"/*

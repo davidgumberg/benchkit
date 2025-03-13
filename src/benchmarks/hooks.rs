@@ -9,6 +9,7 @@ pub struct ScriptArgs {
     pub binary: String,
     pub connect_address: String,
     pub network: String,
+    pub out_dir: PathBuf,
     pub snapshot_path: PathBuf,
     pub tmp_data_dir: PathBuf,
 }
@@ -39,13 +40,15 @@ impl HookManager {
         for hook_type in hook_types.iter() {
             if let Some(value) = options.get_mut(*hook_type) {
                 if let Some(script) = value.as_str() {
-                    // Construct the new script command with arguments in a fixed order
+                    // Construct the new script command with arguments in a fixed order + the
+                    // hyperfine iteration counter
                     let new_script = format!(
-                        "{} {} {} {} {} {}",
+                        "{} {} {} {} {} {} {} \"$HYPERFINE_ITERATION\" {{commit}}",
                         script,
                         script_args.binary,
                         script_args.connect_address,
                         script_args.network,
+                        script_args.out_dir.display(),
                         script_args.snapshot_path.display(),
                         script_args.tmp_data_dir.display(),
                     );

@@ -52,8 +52,8 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
 
     // Resolve relative paths to absolute paths and create directories
     for path in [
-        &mut config.home_dir,
         &mut config.bin_dir,
+        &mut config.home_dir,
         &mut config.snapshot_dir,
     ]
     .iter_mut()

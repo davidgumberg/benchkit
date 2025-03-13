@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use log::{debug, info};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod build;
@@ -20,34 +20,55 @@ use crate::types::Network;
 
 pub struct Runner {
     config: GlobalConfig,
+    out_dir: PathBuf,
 }
 
 impl Runner {
-    pub fn new(config: GlobalConfig) -> Result<Self> {
-        Ok(Self { config })
+    pub fn new(
+        config: GlobalConfig,
+        out_dir: PathBuf,
+        app_config: &PathBuf,
+        bench_config: &PathBuf,
+    ) -> Result<Self> {
+        // Configure stage
+        debug!("Using output directory: {}", out_dir.display());
+        std::fs::create_dir_all(&out_dir)?;
+        if std::fs::read_dir(&out_dir)?.next().is_some() {
+            anyhow::bail!(
+                "Output directory '{}' is not empty. Please clear it before running benchmarks",
+                out_dir.display()
+            );
+        }
+        let app_config_name = app_config.file_name().unwrap_or_default();
+        let bench_config_name = bench_config.file_name().unwrap_or_default();
+        std::fs::copy(app_config, out_dir.join(app_config_name))?;
+        std::fs::copy(bench_config, out_dir.join(bench_config_name))?;
+
+        Ok(Self { config, out_dir })
     }
 
-    pub async fn run(&self) -> Result<()> {
-        for bench in &self.config.bench.benchmarks {
+    pub async fn run(&self, name: Option<&str>) -> Result<()> {
+        let benchmarks = match name {
+            Some(n) => {
+                let bench = self
+                    .config
+                    .bench
+                    .benchmarks
+                    .iter()
+                    .find(|b| b.name == n)
+                    .with_context(|| format!("Benchmark not found: {}", n))?;
+                vec![bench]
+            }
+            None => self.config.bench.benchmarks.iter().collect(),
+        };
+
+        for bench in benchmarks {
+            // TODO: Remove this check to enable runs without AssumeUTXO
             self.check_snapshot(bench, &self.config.app.snapshot_dir)
                 .await?;
             self.run_benchmark(bench).await?;
         }
         Ok(())
-    }
-
-    pub async fn run_single(&self, name: &str) -> Result<()> {
-        let bench = self
-            .config
-            .bench
-            .benchmarks
-            .iter()
-            .find(|b| b.name == name)
-            .with_context(|| format!("Benchmark not found: {}", name))?;
-
-        self.check_snapshot(bench, &self.config.app.snapshot_dir)
-            .await?;
-        self.run_benchmark(bench).await
     }
 
     async fn check_snapshot(&self, bench: &SingleConfig, snapshot_dir: &Path) -> Result<()> {
@@ -82,9 +103,6 @@ This can be downloaded with `benchkit snapshot download {}`",
         }
         merged_hyperfine.extend(bench.hyperfine.clone());
 
-        // Create a temporary output directory
-        // let out_dir = tempfile::TempDir::new()?.into_path();
-
         // Update command to use full binary path and apply chain= param
         if let Some(Value::String(command)) = merged_hyperfine.get_mut("command") {
             let new_command = command.replace(
@@ -116,6 +134,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         let script_args = ScriptArgs {
             binary: format!("{}/bitcoind-{{commit}}", self.config.app.bin_dir.display()),
             connect_address: bench.connect.clone().unwrap_or_default(),
+            out_dir: self.out_dir.clone(),
             network: bench.network.clone(),
             snapshot_path,
             tmp_data_dir: self.config.bench.global.tmp_data_dir.clone(),
@@ -127,11 +146,11 @@ This can be downloaded with `benchkit snapshot download {}`",
             .with_context(|| "Failed to add hyperfine script hooks")?;
 
         // Add commits to parameter-lists if not already present
-        let param_lists = merged_hyperfine
+        let parameter_lists = merged_hyperfine
             .entry("parameter_lists".to_string())
             .or_insert_with(|| Value::Array(Vec::new()));
 
-        if let Value::Array(lists) = param_lists {
+        if let Value::Array(lists) = parameter_lists {
             // Check if commits parameter list already exists
             if !lists
                 .iter()
@@ -146,31 +165,27 @@ This can be downloaded with `benchkit snapshot download {}`",
             }
         }
 
-        // Check the export path before running hyperfine
-        let export_path = merged_hyperfine
-            .get("export_json")
-            .and_then(Value::as_str)
-            .with_context(|| {
-                format!(
-                    "Missing required 'export_json' field in benchmark '{}'",
-                    bench.name
-                )
-            })?;
+        // Hardcode the export path to the top-level of the out_dir
+        let export_path = self.out_dir.join("results.json");
+        merged_hyperfine.insert(
+            "export_json".to_string(),
+            Value::String(export_path.to_string_lossy().into_owned()),
+        );
 
         // Run hyperfine with merged options
         self.run_hyperfine(bench, &merged_hyperfine)?;
 
         // Check for and process results
-        if !Path::new(export_path).exists() {
+        if !Path::new(&export_path).exists() {
             anyhow::bail!(
                 "Expected JSON results file not found at '{}' for benchmark '{}'",
-                export_path,
+                export_path.display(),
                 bench.name
             );
         }
 
-        let results_json = std::fs::read_to_string(export_path)
-            .with_context(|| format!("Failed to read results file: {}", export_path))?;
+        let results_json = std::fs::read_to_string(&export_path)
+            .with_context(|| format!("Failed to read results file: {}", export_path.display()))?;
 
         // Store results in database
         crate::database::store_results(
@@ -180,11 +195,6 @@ This can be downloaded with `benchkit snapshot download {}`",
             self.config.bench.run_id,
         )
         .await?;
-
-        // Cleanup
-        std::fs::remove_file(export_path)
-            .with_context(|| format!("Failed to remove results file: {}", export_path))?;
-
         Ok(())
     }
 

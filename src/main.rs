@@ -11,7 +11,7 @@ use benchkit::{
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 // use futures::StreamExt;
-use log::{info, warn};
+use log::{debug, info, warn};
 // use object_store::aws::{AmazonS3, AmazonS3Builder};
 // use object_store::ObjectStore;
 use std::{path::PathBuf, process};
@@ -55,8 +55,13 @@ enum Commands {
     },
     /// Run benchmarks
     Run {
-        #[command(subcommand)]
-        command: RunCommands,
+        /// Benchmark name to run (optional - runs all if not specified)
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Output directory for storing benchmark artifacts
+        #[arg(short, long, required = true)]
+        out_dir: PathBuf,
     },
     /// Download an assumeutxo snapshot
     Snapshot {
@@ -84,18 +89,6 @@ enum DbCommands {
     Test,
     /// [WARNING] Drop database and user
     Delete,
-}
-
-#[derive(Subcommand, Debug)]
-enum RunCommands {
-    /// Run all benchmarks found in config yml
-    All {},
-    /// Run a single benchmark from config yml
-    Single {
-        /// Benchmark name to run (single only)
-        #[arg(short, long)]
-        name: String,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -168,22 +161,26 @@ async fn main() -> Result<()> {
                 database::delete_database_interactive(&config.app.database).await?;
             }
         },
-        Commands::Run { command } => {
+        Commands::Run { name, out_dir } => {
+            // TODO: Remove this requirement on db for runs
             database::check_connection(&config.app.database).await?;
+
+            // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
-            match command {
-                RunCommands::All {} => {
-                    let runner = benchmarks::Runner::new(config.clone())?;
-                    runner.run().await?;
-                    info!("All benchmarks completed successfully.");
-                }
-                RunCommands::Single { name } => {
-                    let runner = benchmarks::Runner::new(config.clone())?;
-                    runner.run_single(name).await?;
-                    info!("Benchmark completed successfully.");
-                }
-            }
+
+            // Run stage
+            let runner = benchmarks::Runner::new(
+                config.clone(),
+                out_dir.clone(),
+                &cli.app_config,
+                &cli.bench_config,
+            )?;
+            runner.run(name.as_deref()).await?;
+            info!(
+                "{} completed successfully.",
+                name.as_deref().unwrap_or("All benchmarks")
+            );
         }
         Commands::Snapshot { command } => match command {
             SnapshotCommands::Download { network } => {

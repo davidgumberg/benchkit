@@ -11,7 +11,6 @@ global:
     prepare: ./scripts/prepare.sh
     conclude: ./scripts/conclude.sh
     cleanup: ./scripts/cleanup.sh
-    export_json: results.json
     shell: /bin/bash
     show_output: true
 
@@ -50,7 +49,6 @@ benchmarks:
       # (bitcoin) [network] applied automatically. {dbcache} is an explicit
       # (additional) parameterisation from [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} -stopatheight=160001"
-      prepare: echo "don't snapshot"
       warmup: 0
       runs: 1
 
