@@ -16,6 +16,7 @@ use hooks::{HookManager, ScriptArgs};
 // pub use object_storage::ObjectStorage;
 
 use crate::config::GlobalConfig;
+use crate::system_info::dump_sys_info;
 use crate::types::Network;
 
 pub struct Runner {
@@ -43,7 +44,7 @@ impl Runner {
         let bench_config_name = bench_config.file_name().unwrap_or_default();
         std::fs::copy(app_config, out_dir.join(app_config_name))?;
         std::fs::copy(bench_config, out_dir.join(bench_config_name))?;
-
+        dump_sys_info(&out_dir.join("system_info"))?;
         Ok(Self { config, out_dir })
     }
 
