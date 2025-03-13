@@ -10,7 +10,7 @@ use crate::{benchmarks::BenchmarkConfig, database::DatabaseConfig};
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
-    pub database: DatabaseConfig,
+    pub database: Option<DatabaseConfig>,
     pub home_dir: PathBuf,
     pub patch_dir: PathBuf,
     pub snapshot_dir: PathBuf,

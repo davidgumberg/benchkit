@@ -12,19 +12,20 @@ patch_dir: $HOME/.local/state/benchkit/patches
 snapshot_dir: $HOME/.local/state/benchkit/snapshots
 
 # Database configuration
-database:
-
-  # postgres host
-  host: localhost
-
-  # postgres port
-  port: 5432
-
-  # database name
-  database: benchmarks
-
-  # postgres username
-  user: benchkit
-
-  # postgres password
-  password: benchcoin
+# Only required to use `db` commands
+# database:
+#
+#   # postgres host
+#   host: localhost
+#
+#   # postgres port
+#   port: 5432
+#
+#   # database name
+#   database: benchmarks
+#
+#   # postgres username
+#   user: benchkit
+#
+#   # postgres password
+#   password: benchcoin

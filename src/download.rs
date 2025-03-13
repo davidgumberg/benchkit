@@ -54,12 +54,12 @@ pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow::Resu
             // .progress_chars("█▓▒░  "),
             .progress_chars("⟨⟨⟨⟨⟨····· "),
     );
-    
+
     let mut file = File::create(&filepath)?;
     let content = response.bytes()?;
     file.write_all(&content)?;
     pb.set_position(content.len() as u64);
-    
+
     pb.finish();
     info!("Successfully downloaded {filepath:?}");
     Ok(())

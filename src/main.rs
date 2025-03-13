@@ -151,15 +151,20 @@ fn main() -> Result<()> {
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
         }
-        Commands::Db { command } => match command {
-            DbCommands::Init => {
-                database::initialize_database(&config.app.database)?;
-            }
-            DbCommands::Test => {
-                database::check_connection(&config.app.database)?;
-            }
-            DbCommands::Delete => {
-                database::delete_database_interactive(&config.app.database)?;
+        Commands::Db { command } => match &config.app.database {
+            Some(db_config) => match command {
+                DbCommands::Init => {
+                    database::initialize_database(db_config)?;
+                }
+                DbCommands::Test => {
+                    database::check_connection(db_config)?;
+                }
+                DbCommands::Delete => {
+                    database::delete_database_interactive(db_config)?;
+                }
+            },
+            None => {
+                anyhow::bail!("Database configuration is required but not found in config file. Please add database settings to your config file.");
             }
         },
         Commands::Run { name, out_dir } => {
