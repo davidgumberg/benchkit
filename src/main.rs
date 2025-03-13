@@ -11,7 +11,7 @@ use benchkit::{
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 // use futures::StreamExt;
-use log::{debug, info, warn};
+use log::{info, warn};
 // use object_store::aws::{AmazonS3, AmazonS3Builder};
 // use object_store::ObjectStore;
 use std::{path::PathBuf, process};
@@ -162,9 +162,6 @@ async fn main() -> Result<()> {
             }
         },
         Commands::Run { name, out_dir } => {
-            // TODO: Remove this requirement on db for runs
-            database::check_connection(&config.app.database).await?;
-
             // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;

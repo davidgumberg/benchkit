@@ -183,18 +183,6 @@ This can be downloaded with `benchkit snapshot download {}`",
                 bench.name
             );
         }
-
-        let results_json = std::fs::read_to_string(&export_path)
-            .with_context(|| format!("Failed to read results file: {}", export_path.display()))?;
-
-        // Store results in database
-        crate::database::store_results(
-            &self.config.app.database.connection_string(),
-            &bench.name,
-            &results_json,
-            self.config.bench.run_id,
-        )
-        .await?;
         Ok(())
     }
 
