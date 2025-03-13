@@ -27,7 +27,9 @@
 - [ ] out_dir/ci_run_id wiped from runner
 
 ## Database
-- [x] Decouple db so that it's not required for `run`.
+- [ ] Decouple db so that it's not required for `run`.
+    - [x] Remove requirement
+    - [ ] Remove requirement from config file
 - [ ] Make `benchkit db upload out_dir` add to db
 
 ## S3

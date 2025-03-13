@@ -1,26 +1,27 @@
 # Benchkit
 
-A Rust-based benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine](https://github.com/sharkdp/hyperfine) as the underlying benchmarking engine.
+A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine](https://github.com/sharkdp/hyperfine) as the underlying benchmarking engine.
 
 ## Features
 
 - Run single or multiple benchmarks defined in YAML configuration files
-- Store benchmark results in PostgreSQL for analysis
 - Support for parameterized benchmarks with multiple variable combinations
 - Configurable benchmark environment variables
-- Integration with CI/PR workflows via PR number and run ID tracking
+- Integration with CI/PR workflows via run ID tracking
 - Command wrapping support (e.g., `taskset` for CPU pinning)
 - System performance tuning and monitoring
+- Patch management and updating
 - Object storage integration for benchmark artifacts
 - AssumeUTXO snapshot management
+- Store benchmark results in PostgreSQL for analysis
 
 ## Prerequisites
 
 - Rust 1.84.1 or later
-- PostgreSQL
-- hyperfine
-- sudo access for database operations
+- hyperfine >= v1.19.0
 - Guix (for building Bitcoin Core)
+- PostgreSQL (optional)
+    - sudo access for database operations
 
 ## Installation
 
@@ -57,19 +58,6 @@ export RUST_LOG=info
 
 ## Command Reference
 
-### Database Management
-
-```bash
-# Initialize a PostGres database for benchkit
-benchkit db init
-
-# Test database connection
-benchkit db test
-
-# Delete database and user (interactive)
-benchkit db delete
-```
-
 ### Building Bitcoin Core
 
 ```bash
@@ -81,10 +69,10 @@ benchkit build
 
 ```bash
 # Run all benchmarks from config
-benchkit run all
+benchkit run --out-dir ./out
 
 # Run a specific benchmark
-benchkit run single --name "benchmark-name"
+benchkit run --name "benchmark-name" --out-dir ./out
 ```
 
 ### System Performance Management
@@ -112,6 +100,22 @@ benchkit snapshot download [mainnet|signet]
 ```bash
 # Test the benchcoin patches apply cleanly to all refs
 benchkit patch test
+
+# Fetch latest benchkit patches from github
+benchkit patch update
+```
+
+### Database Management
+
+```bash
+# Initialize a Postgres database for benchkit
+benchkit db init
+
+# Test database connection
+benchkit db test
+
+# Delete database and user (interactive)
+benchkit db delete
 ```
 
 ## Configuration Files
@@ -121,6 +125,7 @@ benchkit patch test
 ```yaml
 home_dir: $HOME/.local/state/benchkit
 bin_dir: $HOME/.local/state/benchkit/binaries
+patch_dir: $HOME/.local/state/benchkit/patches
 snapshot_dir: $HOME/.local/state/benchkit/snapshots
 
 database:
