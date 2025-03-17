@@ -1,9 +1,10 @@
 # Copyright 0xB10C, willcl-ark
+# Commit from https://status.nixos.org/ on 2025-03-17
 { pkgs ? import
-  (fetchTarball "https://github.com/nixos/nixpkgs/archive/nixos-24.11.tar.gz") {
+  (fetchTarball "https://github.com/NixOS/nixpkgs/archive/a1185f4064c18a5db37c5c84e5638c78b46e3341.tar.gz") {
     overlays = [
       (import (fetchTarball
-        "https://github.com/oxalica/rust-overlay/archive/master.tar.gz"))
+        "https://github.com/oxalica/rust-overlay/archive/954582a766a50ebef5695a9616c93b5386418c08.tar.gz"))
     ];
   } }:
 let
