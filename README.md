@@ -27,6 +27,9 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine]
 
 ```bash
 cargo install --path .
+
+# With optional database feature
+cargo install --path . --features=database
 ```
 
 ## Environment Configuration
@@ -36,13 +39,6 @@ The project includes an `.envrc.example` file that shows all required environmen
 Key environment variables:
 
 ```bash
-# Benchkit Database Configuration
-export PGHOST=127.0.0.1
-export PGPORT=5432
-export PGDATABASE=benchmarks
-export PGUSER=benchkit
-export PGPASSWORD=benchpass
-
 # Guix Build Caching Configuration
 export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
 export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
@@ -51,6 +47,13 @@ export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
 # Object Storage (optional)
 export KEY_ID=<your_id>
 export SECRET_ACCESS_KEY=<your_password>
+
+# Benchkit Database Configuration (optional)
+export PGHOST=127.0.0.1
+export PGPORT=5432
+export PGDATABASE=benchmarks
+export PGUSER=benchkit
+export PGPASSWORD=benchpass
 
 # Logging
 export RUST_LOG=info
@@ -127,13 +130,6 @@ home_dir: $HOME/.local/state/benchkit
 bin_dir: $HOME/.local/state/benchkit/binaries
 patch_dir: $HOME/.local/state/benchkit/patches
 snapshot_dir: $HOME/.local/state/benchkit/snapshots
-
-database:
-  host: localhost
-  port: 5432
-  database: benchmarks
-  user: benchkit
-  password: benchcoin
 ```
 
 ### Benchmark Configuration (benchmark.yml)

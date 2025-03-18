@@ -5,12 +5,15 @@ use std::path::PathBuf;
 
 use shellexpand;
 
-use crate::{benchmarks::BenchmarkConfig, database::DatabaseConfig};
+use crate::benchmarks::BenchmarkConfig;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
-    pub database: Option<DatabaseConfig>,
+    #[cfg(feature = "database")]
+    pub database: Option<crate::database::DatabaseConfig>,
+    #[cfg(not(feature = "database"))]
+    pub database: Option<Vec<String>>,
     pub home_dir: PathBuf,
     pub patch_dir: PathBuf,
     pub snapshot_dir: PathBuf,

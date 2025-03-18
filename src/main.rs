@@ -2,7 +2,6 @@ use anyhow::Result;
 use benchkit::{
     benchmarks::{self, load_bench_config, BenchmarkConfig},
     config::{load_app_config, AppConfig, GlobalConfig},
-    database::{self},
     download::download_snapshot,
     system::SystemChecker,
     types::Network,
@@ -49,6 +48,7 @@ enum Commands {
     /// Build bitcoin core binaries using guix
     Build {},
     /// Database administration
+    #[cfg(feature = "database")]
     Db {
         #[command(subcommand)]
         command: DbCommands,
@@ -81,6 +81,7 @@ enum Commands {
     },
 }
 
+#[cfg(feature = "database")]
 #[derive(Subcommand, Debug)]
 enum DbCommands {
     /// Initialise database if not exists
@@ -151,16 +152,17 @@ fn main() -> Result<()> {
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
         }
+        #[cfg(feature = "database")]
         Commands::Db { command } => match &config.app.database {
             Some(db_config) => match command {
                 DbCommands::Init => {
-                    database::initialize_database(db_config)?;
+                    benchkit::database::initialize_database(db_config)?;
                 }
                 DbCommands::Test => {
-                    database::check_connection(db_config)?;
+                    benchkit::database::check_connection(db_config)?;
                 }
                 DbCommands::Delete => {
-                    database::delete_database_interactive(db_config)?;
+                    benchkit::database::delete_database_interactive(db_config)?;
                 }
             },
             None => {
