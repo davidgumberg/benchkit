@@ -9,6 +9,7 @@ anyhow = "1.0.95"
 clap = { version = "4.5.29", features = ["cargo", "derive", "env"] }
 env_logger = "0.11.6"
 indicatif = "0.17.11"
+libbpf-rs = "0.24"
 log = "0.4.26"
 object_store = { version = "0.11.2", features = ["aws"] }
 postgres = "0.19.10"
@@ -24,3 +25,7 @@ sysinfo = "0.33.1"
 tempfile = "3.17.1"
 thiserror = "2.0.11"
 url = "2.5.4"
+
+
+[build-dependencies]
+libbpf-cargo = "0.24"
