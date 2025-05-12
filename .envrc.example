@@ -1,20 +1,17 @@
-# Benchkit
+# Example environment configuration for Benchkit
+# If using direnv and Nix, enable the flake (requires direnv installed)
+# use flake
+
+# PostgreSQL configuration
 export PGHOST=127.0.0.1
 export PGPORT=5432
 export PGDATABASE=benchmarks
 export PGUSER=benchkit
-export PGPASSWORD=benchpass
+export PGPASSWORD=benchpass  # Secure this in production
 
-# Guix
-export HOSTS=x86_64-linux-gnu
-export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
-export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
-export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
-
-# Object Storage
+# Object Storage (e.g., AWS S3 or MinIO)
 export KEY_ID=<your_id>
-export SECRET_ACCESS_KEY=<your_password>
+export SECRET_ACCESS_KEY=<your_password>  # Secure this in production
 
-# benchcoin log level
+# Benchcoin logging
 export RUST_LOG=info
-
