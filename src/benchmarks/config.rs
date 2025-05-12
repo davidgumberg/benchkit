@@ -10,6 +10,7 @@ pub struct BenchmarkGlobalConfig {
     pub hyperfine: Option<HashMap<String, Value>>,
     pub wrapper: Option<String>,
     pub source: PathBuf,
+    pub scratch: PathBuf,
     pub commits: Vec<String>,
     pub tmp_data_dir: PathBuf,
     pub host: String,
@@ -91,6 +92,7 @@ pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<Ben
 
     // Process both paths
     process_path(&mut config.global.source, false)?;
+    process_path(&mut config.global.scratch, false)?;
     process_path(&mut config.global.tmp_data_dir, true)?;
 
     debug!("Using configuration\n{:?}", config);

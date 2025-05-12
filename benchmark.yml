@@ -20,9 +20,12 @@ global:
   # Path to source code (required).
   # Can point to a local or online fork of bitcoin/bitcoin.
   source: $HOME/src/core/bitcoin
+ 
+  # The directory binaries will be built into
+  scratch: $HOME/.local/state/benchkit/scratch
 
   # Commits to build binaries from (required).
-  commits: ["62bd1960fdf", "82f89cf41d5"]
+  commits: ["746ab19d5a13c98ae7492f9b6fb7bd6a2103c65d" ]
 
   # A temporary datadir for Bitcoin Core to use
   tmp_data_dir: /tmp/benchkit

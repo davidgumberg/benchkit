@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -18,10 +19,7 @@ impl Builder {
                 config.bench.global.source.display()
             );
         }
-        let patches = vec![
-            "0001-guix-benchmarking-patches.patch".to_string(),
-            "0001-validation-assumeutxo-benchmarking-patches.patch".to_string(),
-        ];
+        let patches = vec!["0001-validation-assumeutxo-benchmarking-patches.patch".to_string()];
         Ok(Self { config, patches })
     }
 
@@ -105,8 +103,8 @@ impl Builder {
         self.checkout_commit(original_commit)?;
         let patched_commit = self.apply_patches()?;
         debug!("Commit hash after applying patches: {}", patched_commit);
-        self.run_build(patched_commit.as_str())?;
-        self.copy_binary(patched_commit.as_str(), original_commit)?;
+        self.run_build(original_commit)?;
+        self.copy_binary(original_commit)?;
         Ok(())
     }
 
@@ -262,34 +260,38 @@ impl Builder {
         Ok(())
     }
 
-    fn get_full_commit(&self, commit: &str) -> Result<String> {
-        let output = Command::new("git")
-            .current_dir(&self.config.bench.global.source)
-            .arg("rev-parse")
-            .arg(commit)
-            .output()
-            .with_context(|| format!("Failed to expand commit hash '{}'", commit))?;
+    fn run_build(&self, original_commit: &str) -> Result<()> {
+        // Make a build-dir using the short commit-hash
+        let dir = self
+            .config
+            .bench
+            .global
+            .scratch
+            .join(format!("build-{}", original_commit));
 
-        if !output.status.success() {
-            anyhow::bail!("Failed to resolve commit hash '{}'", commit);
+        info!("Making build dir: {:?}", dir);
+        fs::create_dir(&dir)?;
+        let canonical_dir = fs::canonicalize(&dir)?;
+
+        // Run cmake configuration
+        let mut cmd = Command::new("cmake");
+        cmd.current_dir(&self.config.bench.global.source)
+            .arg("-B")
+            .arg(&canonical_dir)
+            .arg("-DBUILD_CLI=OFF")
+            .arg("-DBUILD_TESTS=OFF")
+            .arg("-DCMAKE_CXX_FLAGS=-fno-omit-frame-pointer");
+
+        let config_status = cmd
+            .status()
+            .with_context(|| format!("Failed to configure cmake for commit {}", original_commit))?;
+
+        if !config_status.success() {
+            anyhow::bail!("CMake configuration failed for commit {}", original_commit);
         }
 
-        let full_hash = String::from_utf8(output.stdout)
-            .with_context(|| format!("Invalid UTF-8 in git output for commit '{}'", commit))?
-            .trim()
-            .to_string();
-        debug!(
-            "Resolved config commit {} to full hash {}",
-            commit, full_hash
-        );
-        Ok(String::from(&full_hash[..12]))
-    }
-
-    fn run_build(&self, patched_commit: &str) -> Result<()> {
-        let short_patched_commit = self.get_full_commit(patched_commit).unwrap();
-
-        // Create base command depending on CI environment
-        let mut cmd = if std::env::var("CI").is_ok() {
+        // Run cmake build
+        let mut cmake_build = if std::env::var("CI").is_ok() {
             let mut cmd = Command::new("taskset");
             cmd.current_dir(&self.config.bench.global.source)
                 .arg("-c")
@@ -297,65 +299,43 @@ impl Builder {
                 .arg("chrt")
                 .arg("-f")
                 .arg("1")
-                .arg("contrib/guix/guix-build");
+                .arg("cmake")
+                .arg("--build")
+                .arg(&canonical_dir)
+                .arg("--target")
+                .arg("bitcoind")
+                .arg("--parallel");
             cmd
         } else {
-            let mut cmd = Command::new("contrib/guix/guix-build");
-            cmd.current_dir(&self.config.bench.global.source);
+            let mut cmd = Command::new("cmake");
+            cmd.current_dir(&self.config.bench.global.source)
+                .arg("--build")
+                .arg(&canonical_dir)
+                .arg("--target")
+                .arg("bitcoind")
+                .arg("--parallel");
             cmd
         };
 
-        // Always set this as we apply patches but we don't want to commit
-        // cmd.env("FORCE_DIRTY_WORKTREE", "1");
-
-        // Conditionally set some guix environment variables if they exist
-        let env_vars = ["SOURCES_PATH", "BASE_CACHE", "SDK_PATH"];
-        for var in &env_vars {
-            if let Ok(value) = std::env::var(var) {
-                cmd.env(var, value);
-            }
-        }
-        cmd.env("HOSTS", self.config.bench.global.host.clone());
-
-        let status = cmd
+        let build_status = cmake_build
             .status()
-            .with_context(|| format!("Failed to run build for commit {}", patched_commit))?;
+            .with_context(|| format!("Failed to build bitcoind for commit {}", original_commit))?;
 
-        if !status.success() {
-            anyhow::bail!("Build failed for commit {}", patched_commit);
-        }
-
-        let archive_path = self.config.bench.global.source.join(format!(
-            "guix-build-{}/output/{}/bitcoin-{}-{}.tar.gz",
-            short_patched_commit,
-            self.config.bench.global.host,
-            short_patched_commit,
-            self.config.bench.global.host,
-        ));
-
-        let status = Command::new("tar")
-            .current_dir(&self.config.bench.global.source)
-            .arg("-xzf")
-            .arg(&archive_path)
-            .status()
-            .with_context(|| format!("Failed to extract archive for commit {}", patched_commit))?;
-
-        if !status.success() {
-            anyhow::bail!("Failed to extract archive for commit {}", patched_commit);
+        if !build_status.success() {
+            anyhow::bail!("CMake build failed for commit {}", original_commit);
         }
 
         Ok(())
     }
 
-    fn copy_binary(&self, patched_commit: &str, original_commit: &str) -> Result<()> {
-        let short_patched_commit = &self.get_full_commit(patched_commit).unwrap()[..12];
-        // let short_original_commit = &self.get_full_commit(original_commit).unwrap()[..12];
-        let src_path = self
+    fn copy_binary(&self, original_commit: &str) -> Result<()> {
+        let dir = self
             .config
             .bench
             .global
-            .source
-            .join(format!("bitcoin-{}/bin/bitcoind", short_patched_commit));
+            .scratch
+            .join(format!("build-{}", original_commit));
+        let src_path = dir.clone().join("bin/bitcoind");
         let dest_path = self
             .config
             .app
@@ -363,21 +343,20 @@ impl Builder {
             .join(format!("bitcoind-{}", original_commit));
         debug!("Copying {src_path:?} to {dest_path:?}");
 
-        std::fs::copy(&src_path, &dest_path).with_context(|| {
-            format!("Failed to copy binary for commit {}", short_patched_commit)
-        })?;
+        std::fs::copy(&src_path, &dest_path)
+            .with_context(|| format!("Failed to copy binary for commit {}", original_commit))?;
 
         std::fs::remove_dir_all(
             self.config
                 .bench
                 .global
-                .source
-                .join(format!("bitcoin-{}", short_patched_commit)),
+                .scratch
+                .join(format!("build-{}", original_commit)),
         )
         .with_context(|| {
             format!(
-                "Failed to cleanup extracted files for commit {}",
-                short_patched_commit
+                "Failed to cleanup extracted files for commit {} from {:?}",
+                original_commit, dir
             )
         })?;
 
