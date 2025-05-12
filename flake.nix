@@ -26,6 +26,7 @@
           boost
           capnproto
           libevent
+          hyperfine
           sqlite
           zeromq
         ];
