@@ -47,12 +47,6 @@ struct Cli {
 enum Commands {
     /// Build bitcoin core binaries
     Build {},
-    /// Database administration
-    #[cfg(feature = "database")]
-    Db {
-        #[command(subcommand)]
-        command: DbCommands,
-    },
     /// Run benchmarks
     Run {
         /// Benchmark name to run (optional - runs all if not specified)
@@ -79,17 +73,6 @@ enum Commands {
         #[command(subcommand)]
         command: PatchCommands,
     },
-}
-
-#[cfg(feature = "database")]
-#[derive(Subcommand, Debug)]
-enum DbCommands {
-    /// Initialise database if not exists
-    Init,
-    /// Test connection to postgres backend
-    Test,
-    /// [WARNING] Drop database and user
-    Delete,
 }
 
 #[derive(Subcommand, Debug)]
@@ -152,23 +135,6 @@ fn main() -> Result<()> {
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
         }
-        #[cfg(feature = "database")]
-        Commands::Db { command } => match &config.app.database {
-            Some(db_config) => match command {
-                DbCommands::Init => {
-                    benchkit::database::initialize_database(db_config)?;
-                }
-                DbCommands::Test => {
-                    benchkit::database::check_connection(db_config)?;
-                }
-                DbCommands::Delete => {
-                    benchkit::database::delete_database_interactive(db_config)?;
-                }
-            },
-            None => {
-                anyhow::bail!("Database configuration is required but not found in config file. Please add database settings to your config file.");
-            }
-        },
         Commands::Run { name, out_dir } => {
             // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;

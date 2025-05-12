@@ -21,16 +21,11 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine]
 - Rust 1.84.1 or later
 - hyperfine >= v1.19.0
 - Nix package manager
-- PostgreSQL (optional)
-    - sudo access for database operations
 
 ## Installation
 
 ```bash
 cargo install --path .
-
-# With optional database feature
-cargo install --path . --features=database
 ```
 
 ## Environment Configuration
@@ -43,13 +38,6 @@ Key environment variables:
 # Object Storage (optional)
 export KEY_ID=<your_id>
 export SECRET_ACCESS_KEY=<your_password>
-
-# Benchkit Database Configuration (optional)
-export PGHOST=127.0.0.1
-export PGPORT=5432
-export PGDATABASE=benchmarks
-export PGUSER=benchkit
-export PGPASSWORD=benchpass
 
 # Logging
 export RUST_LOG=info
@@ -102,19 +90,6 @@ benchkit patch test
 
 # Fetch latest benchkit patches from github
 benchkit patch update
-```
-
-### Database Management
-
-```bash
-# Initialize a Postgres database for benchkit
-benchkit db init
-
-# Test database connection
-benchkit db test
-
-# Delete database and user (interactive)
-benchkit db delete
 ```
 
 ## Configuration Files

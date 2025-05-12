@@ -10,10 +10,6 @@ use crate::benchmarks::BenchmarkConfig;
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
-    #[cfg(feature = "database")]
-    pub database: Option<crate::database::DatabaseConfig>,
-    #[cfg(not(feature = "database"))]
-    pub database: Option<Vec<String>>,
     pub home_dir: PathBuf,
     pub patch_dir: PathBuf,
     pub snapshot_dir: PathBuf,

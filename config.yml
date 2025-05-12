@@ -10,22 +10,3 @@ patch_dir: $HOME/.local/state/benchkit/patches
 
 # The directory containing assumeutxo snapshots
 snapshot_dir: $HOME/.local/state/benchkit/snapshots
-
-# Database configuration
-# Only required to use `db` commands
-# database:
-#
-#   # postgres host
-#   host: localhost
-#
-#   # postgres port
-#   port: 5432
-#
-#   # database name
-#   database: benchmarks
-#
-#   # postgres username
-#   user: benchkit
-#
-#   # postgres password
-#   password: benchcoin
