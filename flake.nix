@@ -18,12 +18,12 @@
         let
           overlays = [ (import rust-overlay) ];
           pkgs = import nixpkgs { inherit system overlays; };
-          lib = pkgs.lib;
         in
         with pkgs;
         {
-          devShells.default = pkgs.mkShell {
-            nativeBuildInputs = with pkgs; [
+          devShells.default = mkShell {
+            stdenv = gcc14Stdenv;
+            nativeBuildInputs = [
               byacc
               ccache
               cmake
@@ -32,17 +32,13 @@
               gnumake
               pkg-config
             ];
-            buildInputs = with pkgs; [
+            buildInputs = [
               boost
-              capnproto
               libevent
               hyperfine
               rust-bin.stable.latest.default
               sqlite
-              zeromq
             ];
-            LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.gcc14.cc pkgs.capnproto ];
-            LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
           };
         }
       );
