@@ -11,6 +11,7 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine]
 - Command wrapping support (e.g., `taskset` for CPU pinning)
 - System performance tuning and monitoring
 - Patch management and updating
+- Nix flake for devShell
 - Object storage integration for benchmark artifacts
 - AssumeUTXO snapshot management
 - Store benchmark results in PostgreSQL for analysis
@@ -19,7 +20,7 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine]
 
 - Rust 1.84.1 or later
 - hyperfine >= v1.19.0
-- Guix (for building Bitcoin Core)
+- Nix package manager
 - PostgreSQL (optional)
     - sudo access for database operations
 
@@ -39,11 +40,6 @@ The project includes an `.envrc.example` file that shows all required environmen
 Key environment variables:
 
 ```bash
-# Guix Build Caching Configuration
-export SOURCES_PATH=$HOME/.local/state/guix-builds/depends-sources-cache/
-export BASE_CACHE=$HOME/.local/state/guix-builds/depends-base-cache/
-export SDK_PATH=$HOME/.local/state/guix-builds/macos-sdks/
-
 # Object Storage (optional)
 export KEY_ID=<your_id>
 export SECRET_ACCESS_KEY=<your_password>
