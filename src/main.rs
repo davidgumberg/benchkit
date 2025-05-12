@@ -45,7 +45,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build bitcoin core binaries using guix
+    /// Build bitcoin core binaries
     Build {},
     /// Database administration
     #[cfg(feature = "database")]

@@ -25,15 +25,7 @@ impl Builder {
 
     fn binary_exists(&self, commit: &str) -> bool {
         let binary_path = self.config.app.bin_dir.join(format!("bitcoind-{}", commit));
-        if binary_path.exists() {
-            info!(
-                "Binary already exists for commit {}, skipping build",
-                commit
-            );
-            true
-        } else {
-            false
-        }
+        binary_path.exists()
     }
 
     pub fn build(&self) -> Result<()> {
@@ -44,7 +36,12 @@ impl Builder {
             if !self.binary_exists(commit) {
                 info!("Building binary for commit {}", commit);
                 self.build_commit(commit)?;
-            }
+            } else {
+                info!(
+                    "Binary already exists for commit {}, skipping build",
+                    commit
+                );
+            };
         }
 
         self.restore_git_state(&initial_ref)?;
@@ -75,6 +72,7 @@ impl Builder {
     }
 
     fn get_initial_ref(&self) -> Result<String> {
+        // Get the initial ref to check back out to afterwards
         let output = Command::new("git")
             .current_dir(&self.config.bench.global.source)
             .arg("symbolic-ref")
@@ -260,14 +258,14 @@ impl Builder {
         Ok(())
     }
 
-    fn run_build(&self, original_commit: &str) -> Result<()> {
+    fn run_build(&self, commit_hash: &str) -> Result<()> {
         // Make a build-dir using the short commit-hash
         let dir = self
             .config
             .bench
             .global
             .scratch
-            .join(format!("build-{}", original_commit));
+            .join(format!("build-{}", commit_hash));
 
         info!("Making build dir: {:?}", dir);
         fs::create_dir(&dir)?;
@@ -284,10 +282,10 @@ impl Builder {
 
         let config_status = cmd
             .status()
-            .with_context(|| format!("Failed to configure cmake for commit {}", original_commit))?;
+            .with_context(|| format!("Failed to configure cmake for commit {}", commit_hash))?;
 
         if !config_status.success() {
-            anyhow::bail!("CMake configuration failed for commit {}", original_commit);
+            anyhow::bail!("CMake configuration failed for commit {}", commit_hash);
         }
 
         // Run cmake build
@@ -319,44 +317,44 @@ impl Builder {
 
         let build_status = cmake_build
             .status()
-            .with_context(|| format!("Failed to build bitcoind for commit {}", original_commit))?;
+            .with_context(|| format!("Failed to build bitcoind for commit {commit_hash}"))?;
 
         if !build_status.success() {
-            anyhow::bail!("CMake build failed for commit {}", original_commit);
+            anyhow::bail!("CMake build failed for commit {commit_hash}");
         }
 
         Ok(())
     }
 
-    fn copy_binary(&self, original_commit: &str) -> Result<()> {
+    fn copy_binary(&self, commit_hash: &str) -> Result<()> {
         let dir = self
             .config
             .bench
             .global
             .scratch
-            .join(format!("build-{}", original_commit));
+            .join(format!("build-{}", commit_hash));
         let src_path = dir.clone().join("bin/bitcoind");
         let dest_path = self
             .config
             .app
             .bin_dir
-            .join(format!("bitcoind-{}", original_commit));
+            .join(format!("bitcoind-{}", commit_hash));
         debug!("Copying {src_path:?} to {dest_path:?}");
 
         std::fs::copy(&src_path, &dest_path)
-            .with_context(|| format!("Failed to copy binary for commit {}", original_commit))?;
+            .with_context(|| format!("Failed to copy binary for commit {commit_hash}"))?;
 
         std::fs::remove_dir_all(
             self.config
                 .bench
                 .global
                 .scratch
-                .join(format!("build-{}", original_commit)),
+                .join(format!("build-{}", commit_hash)),
         )
         .with_context(|| {
             format!(
                 "Failed to cleanup extracted files for commit {} from {:?}",
-                original_commit, dir
+                commit_hash, dir
             )
         })?;
 

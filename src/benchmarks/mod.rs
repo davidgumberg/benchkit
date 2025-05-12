@@ -64,7 +64,6 @@ impl Runner {
         };
 
         for bench in benchmarks {
-            // TODO: Remove this check to enable runs without AssumeUTXO
             self.check_snapshot(bench, &self.config.app.snapshot_dir)?;
             self.run_benchmark(bench)?;
         }
@@ -213,6 +212,13 @@ This can be downloaded with `benchkit snapshot download {}`",
         let mut cmd = Command::new("hyperfine");
         let command_str;
 
+        // Find the bash executable dynamically
+        let bash_path = std::process::Command::new("which")
+            .arg("bash")
+            .output()
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            .unwrap_or_else(|_| "/usr/bin/env bash".to_string()); // Use fallback to /usr/bin/env bash
+
         // // Add hook script paths to command
         // for (name, path) in script_manager.get_script_paths() {
         //     cmd.arg(format!("--{}", name)).arg(path);
@@ -235,7 +241,11 @@ This can be downloaded with `benchkit snapshot download {}`",
             let arg_key = format!("--{}", key.replace('_', "-"));
             match value {
                 Value::String(s) => {
-                    cmd.arg(arg_key).arg(s);
+                    if key == "shell" {
+                        cmd.arg(arg_key).arg(&bash_path); // Use dynamic bash path
+                    } else {
+                        cmd.arg(arg_key).arg(s);
+                    }
                 }
                 Value::Number(n) => {
                     cmd.arg(arg_key).arg(n.to_string());
