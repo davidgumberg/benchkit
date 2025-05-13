@@ -2,19 +2,21 @@
 # Global benchmarking options.
 global:
 
-  # Global hyperfine option defaults.
+  # Global benchmark option defaults.
   # Will be overwritten by local options specified per-benchmark.
-  hyperfine:
+  benchmark:
     warmup: 1
     runs: 5
+    capture_output: false
+
+  # Script hooks for benchmark lifecycle
+  scripts:
     setup: ./scripts/setup.sh
     prepare: ./scripts/prepare.sh
     conclude: ./scripts/conclude.sh
     cleanup: ./scripts/cleanup.sh
-    shell: /bin/bash
-    show_output: true
 
-  # A command to wrap the hyperfine command.
+  # A command wrapper for benchmarks.
   wrapper: "taskset -c 1-14"
 
   # Path to source code (required).
@@ -44,21 +46,20 @@ benchmarks:
     # An optional address for bitcoind to -connect to for sync
     connect: 127.0.0.1:39333
 
-    # Local hyperfine options.
-    # These override global hyperfine options in case of conflict.
-    # Uses regular hyperfine syntax.
-    hyperfine:
+    # Local benchmark options.
+    # These override global benchmark options in case of conflict.
+    benchmark:
       # The correct binary for the [commit] will be substituted and the
       # (bitcoin) [network] applied automatically. {dbcache} is an explicit
       # (additional) parameterisation from [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} -stopatheight=160001"
+      command: "bitcoind -dbcache={dbcache} -stopatheight=170001"
       warmup: 0
-      runs: 1
+      runs: 2
 
       # A list of zero or more parameters.
       # These will be tried as a matrix.
       parameter_lists:
-        # The variable name to use in hyperfine command substitution.
+        # The variable name to use in command substitution.
         - var: dbcache
           # A list of values to substitute in.
           values: ["450", "32000"]

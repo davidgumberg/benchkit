@@ -49,7 +49,6 @@ impl Builder {
     }
 
     fn check_clean_worktree(&self) -> Result<()> {
-        // Check for unstaged changes
         let unstaged = Command::new("git")
             .current_dir(&self.config.bench.global.source)
             .args(["diff", "--quiet"])
@@ -59,7 +58,6 @@ impl Builder {
             anyhow::bail!("Worktree has unstaged changes. Please commit or stash them first.");
         }
 
-        // Check for staged changes
         let staged = Command::new("git")
             .current_dir(&self.config.bench.global.source)
             .args(["diff", "--quiet", "--staged"])
@@ -259,7 +257,7 @@ impl Builder {
     }
 
     fn run_build(&self, commit_hash: &str) -> Result<()> {
-        // Make a build-dir using the short commit-hash
+        // Make a build-dir using the commit-hash
         let dir = self
             .config
             .bench

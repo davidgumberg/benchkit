@@ -40,8 +40,8 @@
             buildInputs = [
               boost
               libevent
-              hyperfine
               rust-bin.stable.latest.default
+              stress
               sqlite
             ];
           };

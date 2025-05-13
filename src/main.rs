@@ -24,7 +24,7 @@ const DEFAULT_BENCH_CONFIG: &str = "benchmark.yml";
 #[command(
     version,
     about,
-    long_about = "Run benchmarks using hyperfine from a YAML config"
+    long_about = "Run benchmarks for Bitcoin Core from a YAML config"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -38,7 +38,7 @@ struct Cli {
     #[arg(short, long, default_value = DEFAULT_BENCH_CONFIG)]
     bench_config: PathBuf,
 
-    /// Run ID
+    /// Run ID (for CI)
     #[arg(short, long, env = "BENCH_RUN_ID")]
     run_id: Option<i64>,
 }
@@ -119,7 +119,8 @@ fn main() -> Result<()> {
     }
 
     // If we didn't get a run_id generate a random one.
-    // The run_id is used as a temporary directory for the run, collecting artifacts.
+    // The run_id is used as a temporary directory for the run, collecting artifacts/pusing to S3
+    // buckets.
     let run_id = cli.run_id.unwrap_or_else(|| {
         let id = generate_id(false);
         warn!("No run_id specified. Generated random run_id: {}", id);
@@ -136,17 +137,10 @@ fn main() -> Result<()> {
             builder.build()?;
         }
         Commands::Run { name, out_dir } => {
-            // Build stage
             let builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
 
-            // Run stage
-            let runner = benchmarks::Runner::new(
-                config.clone(),
-                out_dir.clone(),
-                &cli.app_config,
-                &cli.bench_config,
-            )?;
+            let runner = benchmarks::Runner::new(config.clone(), out_dir.clone())?;
             runner.run(name.as_deref())?;
             info!(
                 "{} completed successfully.",

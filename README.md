@@ -1,6 +1,6 @@
 # Benchkit
 
-A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine](https://github.com/sharkdp/hyperfine) as the underlying benchmarking engine.
+A benchmarking toolkit designed for benchmarking Bitcoin Core with an internal benchmarking system.
 
 ## Features
 
@@ -19,7 +19,6 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core, using [hyperfine]
 ## Prerequisites
 
 - Rust 1.84.1 or later
-- hyperfine >= v1.19.0
 - Nix package manager
 
 ## Installation
@@ -107,12 +106,10 @@ snapshot_dir: $HOME/.local/state/benchkit/snapshots
 
 ```yaml
 global:
-  hyperfine:
+  benchmark:
     warmup: 1
     runs: 5
-    export_json: results.json
-    shell: /bin/bash
-    show_output: false
+    capture_output: false
 
   wrapper: "taskset -c 1-14"
   source: $HOME/src/core/bitcoin
@@ -124,12 +121,14 @@ benchmarks:
   - name: "assumeutxo signet test sync"
     network: signet
     connect: 127.0.0.1:39333
-    hyperfine:
+    benchmark:
       command: "bitcoind -dbcache={dbcache} -stopatheight=160001"
       parameter_lists:
         - var: dbcache
           values: ["450", "32000"]
 ```
+
+See [Internal Benchmarking](docs/INTERNAL_BENCHMARKING.md) for details on the new configuration format.
 
 ## Benchmark Scripts
 
@@ -139,6 +138,8 @@ The following scripts can be customized in the `scripts/` directory:
 - `prepare.sh`: Preparation before each benchmark run
 - `conclude.sh`: Cleanup after each benchmark run
 - `cleanup.sh`: Final cleanup after all benchmarks
+
+These scripts now use named arguments instead of positional arguments. See [Internal Benchmarking](docs/INTERNAL_BENCHMARKING.md) for details.
 
 ## Tips
 

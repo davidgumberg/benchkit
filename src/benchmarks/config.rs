@@ -5,96 +5,190 @@ use serde_json::Value;
 use shellexpand;
 use std::{collections::HashMap, path::PathBuf};
 
+/// Configuration for benchmark runs
+#[derive(Debug, Deserialize, Clone)]
+pub struct BenchmarkOptions {
+    /// Number of warmup runs to perform (discarded from results)
+    #[serde(default = "default_warmup")]
+    pub warmup: usize,
+    /// Number of measured runs to perform
+    #[serde(default = "default_runs")]
+    pub runs: usize,
+    /// Whether to capture and store command output
+    #[serde(default)]
+    pub capture_output: bool,
+    /// The command template to execute
+    pub command: Option<String>,
+    /// Lists of parameters to substitute in the command
+    pub parameter_lists: Option<Vec<Value>>,
+}
+
+fn default_warmup() -> usize {
+    0
+}
+
+fn default_runs() -> usize {
+    1
+}
+
+/// Global configuration for all benchmarks
 #[derive(Debug, Deserialize, Clone)]
 pub struct BenchmarkGlobalConfig {
-    pub hyperfine: Option<HashMap<String, Value>>,
+    /// Default benchmark options
+    pub benchmark: Option<BenchmarkOptions>,
+    /// Script paths
+    pub scripts: Option<HashMap<String, String>>,
+    /// Optional command wrapper (e.g., taskset)
     pub wrapper: Option<String>,
+    /// Path to source code repository
     pub source: PathBuf,
+    /// Path to scratch directory for building
     pub scratch: PathBuf,
+    /// Git commits to benchmark
     pub commits: Vec<String>,
+    /// Temporary data directory for benchmark runs
     pub tmp_data_dir: PathBuf,
+    /// Target host architecture
     pub host: String,
 }
 
+/// Configuration for a single benchmark
 #[derive(Debug, Deserialize, Clone)]
 pub struct SingleConfig {
+    /// Benchmark name
     pub name: String,
+    /// Environment variables to set
     pub env: Option<HashMap<String, String>>,
+    /// Network to use (main, test, signet, etc.)
     pub network: String,
+    /// Address to connect to
     pub connect: Option<String>,
-    pub hyperfine: HashMap<String, Value>,
+    /// Benchmark-specific options (overrides global options)
+    pub benchmark: HashMap<String, Value>,
 }
 
+/// Complete benchmark configuration
 #[derive(Debug, Deserialize, Clone)]
 pub struct BenchmarkConfig {
+    /// Global configuration options
     pub global: BenchmarkGlobalConfig,
+    /// List of benchmarks to run
     pub benchmarks: Vec<SingleConfig>,
+    /// Unique run ID
+    #[serde(default)]
     pub run_id: i64,
-}
-
-fn expand_path(path: &str) -> String {
-    shellexpand::full(path)
-        .unwrap_or_else(|_| path.into())
-        .into_owned()
+    #[serde(default)]
+    pub path: PathBuf,
 }
 
 pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<BenchmarkConfig> {
     if !bench_config_path.exists() {
-        anyhow::bail!("Config file not found: {:?}", bench_config_path);
+        anyhow::bail!("Benchmark config file not found: {:?}", bench_config_path);
     }
-
-    let config_dir = bench_config_path
-        .parent()
-        .context("Failed to get config directory")?;
-
-    let contents = std::fs::read_to_string(bench_config_path)
-        .with_context(|| format!("Failed to read config file: {:?}", bench_config_path))?;
-
-    // First deserialize into a temporary structure without run_id
-    #[derive(Deserialize)]
-    struct TempConfig {
-        global: BenchmarkGlobalConfig,
-        benchmarks: Vec<SingleConfig>,
-    }
-
-    let temp_config: TempConfig = serde_yaml::from_str(&contents)
+    let contents = std::fs::read_to_string(bench_config_path).with_context(|| {
+        format!(
+            "Failed to read benchmark config file: {:?}",
+            bench_config_path
+        )
+    })?;
+    let mut config: BenchmarkConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {:?}", bench_config_path))?;
+    config.run_id = run_id;
 
-    // Create the final config with run_id
-    let mut config = BenchmarkConfig {
-        global: temp_config.global,
-        benchmarks: temp_config.benchmarks,
-        run_id,
-    };
+    // Expand environment variables in paths
+    let source_path = config.global.source.to_string_lossy();
+    let expanded_source = shellexpand::full(&source_path)
+        .unwrap_or_else(|_| source_path.clone())
+        .into_owned();
+    config.global.source = PathBuf::from(expanded_source);
 
-    // Helper closure to process paths
-    let process_path = |path: &mut PathBuf, is_tmp: bool| -> Result<()> {
-        // Expand environment variables
-        *path = PathBuf::from(expand_path(path.to_str().unwrap()));
+    let scratch_path = config.global.scratch.to_string_lossy();
+    let expanded_scratch = shellexpand::full(&scratch_path)
+        .unwrap_or_else(|_| scratch_path.clone())
+        .into_owned();
+    config.global.scratch = PathBuf::from(expanded_scratch);
 
-        // Convert to absolute path if relative
-        if !path.is_absolute() {
-            *path = config_dir.join(&path);
-        }
+    let tmp_data_dir_path = config.global.tmp_data_dir.to_string_lossy();
+    let expanded_tmp_data_dir = shellexpand::full(&tmp_data_dir_path)
+        .unwrap_or_else(|_| tmp_data_dir_path.clone())
+        .into_owned();
+    config.global.tmp_data_dir = PathBuf::from(expanded_tmp_data_dir);
+    config.path = bench_config_path.to_path_buf();
 
-        // For tmp_data_dir, create if not exists. For source, verify it exists
-        if is_tmp {
-            debug!("Creating tmp directory: {:?}", path);
-            std::fs::create_dir_all(&path)
-                .with_context(|| format!("Failed to create directory: {:?}", path))?;
-            debug!("Created tmp directory successfully");
-        } else {
-            path.canonicalize()
-                .with_context(|| format!("Failed to resolve path: {:?}", path))?;
-        }
-        Ok(())
-    };
-
-    // Process both paths
-    process_path(&mut config.global.source, false)?;
-    process_path(&mut config.global.scratch, false)?;
-    process_path(&mut config.global.tmp_data_dir, true)?;
-
-    debug!("Using configuration\n{:?}", config);
+    debug!("Using benchmark configuration\n{:?}", config);
     Ok(config)
+}
+
+/// Convert BenchmarkOptions to a HashMap for merging
+fn options_to_hashmap(opts: &BenchmarkOptions) -> HashMap<String, Value> {
+    let mut map = HashMap::new();
+    map.insert("warmup".to_string(), Value::Number(opts.warmup.into()));
+    map.insert("runs".to_string(), Value::Number(opts.runs.into()));
+    map.insert(
+        "capture_output".to_string(),
+        Value::Bool(opts.capture_output),
+    );
+
+    if let Some(cmd) = &opts.command {
+        map.insert("command".to_string(), Value::String(cmd.clone()));
+    }
+
+    if let Some(params) = &opts.parameter_lists {
+        map.insert("parameter_lists".to_string(), Value::Array(params.clone()));
+    }
+
+    map
+}
+
+/// Convert merged HashMap back to BenchmarkOptions
+fn hashmap_to_options(map: &HashMap<String, Value>) -> BenchmarkOptions {
+    let warmup = map
+        .get("warmup")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or_else(default_warmup);
+
+    let runs = map
+        .get("runs")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or_else(default_runs);
+
+    let capture_output = map
+        .get("capture_output")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let command = map
+        .get("command")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let parameter_lists = map
+        .get("parameter_lists")
+        .and_then(|v| v.as_array())
+        .cloned();
+
+    BenchmarkOptions {
+        warmup,
+        runs,
+        capture_output,
+        command,
+        parameter_lists,
+    }
+}
+
+/// Merge global and benchmark-specific options
+pub fn merge_benchmark_options(
+    global_opts: &Option<BenchmarkOptions>,
+    benchmark_opts: &HashMap<String, Value>,
+) -> Result<BenchmarkOptions> {
+    // Star with global options
+    let base_opts = global_opts.clone().unwrap();
+    let mut map = options_to_hashmap(&base_opts);
+    // Merge in benchmark-specific options.
+    map.extend(benchmark_opts.clone());
+    // Convert to BenchmarkOptions
+    // TODO: This is nasty. get rid of it.
+    Ok(hashmap_to_options(&map))
 }

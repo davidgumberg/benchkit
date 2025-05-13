@@ -2,15 +2,40 @@
 set -e
 echo "Running cleanup.sh"
 
-# Scripts always recieve the same arguments from benchkit in the same order:
+# Process named arguments
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --binary=*)
+      BINARY="${1#*=}"
+      ;;
+    --connect=*)
+      CONNECT_ADDRESS="${1#*=}"
+      ;;
+    --network=*)
+      NETWORK="${1#*=}"
+      ;;
+    --out-dir=*)
+      OUT_DIR="${1#*=}"
+      ;;
+    --snapshot=*)
+      SNAPSHOT_PATH="${1#*=}"
+      ;;
+    --datadir=*)
+      TMP_DATADIR="${1#*=}"
+      ;;
+    --iteration=*)
+      ITERATION="${1#*=}"
+      ;;
+    --commit=*)
+      COMMIT="${1#*=}"
+      ;;
+    *)
+      echo "Unknown parameter: $1"
+      exit 1
+      ;;
+  esac
+  shift
+done
 
-# BINARY="$1"
-# CONNECT_ADDRESS="$2"
-# NETWORK="$3"
-# OUT_DIR="$4"
-# SNAPSHOT_PATH="$5"
-TMP_DATADIR="$6"
-# ITERATION="$7"
-# COMMIT="$8"
-
+echo "Final cleanup of datadir ${TMP_DATADIR}"
 rm -Rf "${TMP_DATADIR:?}"/*
