@@ -1,26 +1,24 @@
 # Benchkit
 
-A benchmarking toolkit designed for benchmarking Bitcoin Core with an internal benchmarking system.
+A benchmarking toolkit designed for benchmarking Bitcoin Core.
 
 ## Features
 
 - Run single or multiple benchmarks defined in YAML configuration files
 - Support for parameterized benchmarks with multiple variable combinations
 - Configurable benchmark environment variables
-- Integration with CI/PR workflows via run ID tracking
-- CPU affinity control with hwloc for consistent benchmark results
+<!-- - Integration with CI/PR workflows via run ID tracking -->
+- CPU affinity control for more consistent benchmark results
 - System performance tuning and monitoring
-- Patch management and updating
-- Nix flake for devShell
-- Object storage integration for benchmark artifacts
+- Nix flake for integrated build and run shell environment
+<!-- - Object storage integration for benchmark artifacts -->
 - AssumeUTXO snapshot management
-- Store benchmark results in PostgreSQL for analysis
 
 ## Prerequisites
 
 - Rust 1.84.1 or later
 - Nix package manager
-- hwloc library (for CPU affinity control)
+- (if not useing nix flake) hwloc library (only if using CPU affinity control)
 
 ## Installation
 
@@ -30,7 +28,9 @@ cargo install --path .
 
 ## Environment Configuration
 
-The project includes an `.envrc.example` file that shows all required environment variables. If you use `direnv`, you can copy this to `.envrc` and modify it. Otherwise, ensure these variables are set in your environment.
+The project includes an `.envrc.example` file that shows all required
+environment variables. If you use `direnv`, you can copy this to `.envrc` and
+modify it. Otherwise, ensure these variables are set in your environment.
 
 Key environment variables:
 
@@ -153,7 +153,10 @@ These scripts now use named arguments instead of positional arguments. See [Inte
 
 ## Process Profiling
 
-Benchkit supports runtime profiling of applications, measuring CPU usage, memory consumption, disk I/O, and other metrics over time. This is particularly useful for benchmarking Bitcoin Core operations to identify performance bottlenecks.
+Benchkit supports runtime profiling of applications, measuring CPU usage,
+memory consumption, disk I/O, and other metrics over time. This is particularly
+useful for benchmarking Bitcoin Core operations to identify performance
+bottlenecks.
 
 ### Enabling Profiling
 
@@ -174,11 +177,13 @@ Profiling will:
 
 ### Profiling Output
 
-Profiling results are stored in the benchmark output directory:
-- `profile_run_N/profile_data.json` - Complete profiling data
-- `profile_run_N/profile_data.csv` - CSV format for easy visualization
+Profiling results are stored in the benchmark output directory, subdirectoried undeer the run iteration:
+- `<iteration>/profile_data.json` - Complete profiling data
+- `<iteration>/profile_data.csv` - CSV format for easy visualization
 
-The results include per-sample metrics for CPU usage (percentage), memory usage (bytes), virtual memory usage (bytes), disk read/write (bytes), and elapsed time.
+The results include per-sample metrics for CPU usage (percentage), memory usage
+(bytes), virtual memory usage (bytes), disk read/write (bytes), and elapsed
+time.
 
 ## Contributing
 
