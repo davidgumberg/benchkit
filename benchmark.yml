@@ -32,8 +32,8 @@ global:
 
   # Path to source code (required).
   # Can point to a local or online fork of bitcoin/bitcoin.
-  # source: $HOME/src/core/bitcoin
-  source: https://github.com/bitcoin/bitcoin
+  source: $HOME/src/core/bitcoin
+  # source: https://github.com/bitcoin/bitcoin
  
   # The directory binaries will be built into
   scratch: $HOME/.local/state/benchkit/scratch
@@ -74,18 +74,18 @@ benchmarks:
           # A list of values to substitute in.
           values: ["450", "32000"]
 
-  - name: "signet no assumeutxo"
-    network: signet
-    connect: 127.0.0.1:39333
-    scripts:
-      # Use a custom prepare script which does not do assumeutxo syncing
-      # for a full IBD benchmark to stopheight
-      prepare: ./scripts/prepare-noassumeutxo.sh
-    benchmark:
-      command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
-      profile_interval: 1
-      warmup: 0
-      runs: 1
-      parameter_lists:
-        - var: dbcache
-          values: ["32000"]
+  # - name: "signet no assumeutxo"
+  #   network: signet
+  #   connect: 127.0.0.1:39333
+  #   scripts:
+  #     # Use a custom prepare script which does not do assumeutxo syncing
+  #     # for a full IBD benchmark to stopheight
+  #     prepare: ./scripts/prepare-noassumeutxo.sh
+  #   benchmark:
+  #     command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
+  #     profile_interval: 1
+  #     warmup: 0
+  #     runs: 1
+  #     parameter_lists:
+  #       - var: dbcache
+  #         values: ["32000"]

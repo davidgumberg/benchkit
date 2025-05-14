@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
-use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
 use crate::benchmarks::{RepoSource, RepositoryManager};
 use crate::config::GlobalConfig;
+use crate::path_utils;
 
 pub struct Builder {
     config: GlobalConfig,
@@ -15,8 +15,42 @@ pub struct Builder {
 
 impl Builder {
     pub fn new(config: GlobalConfig) -> Result<Self> {
-        let source_path = config.bench.global.source.to_string_lossy().to_string();
-        let repo_source = RepoSource::new(&source_path);
+        // Get the source path as a string, preserving URL format for remote repos
+        let source_path_str = config.bench.global.source.to_string_lossy().to_string();
+
+        debug!("Source path from config: {source_path_str}");
+
+        // Check if we potentially have a URL in a local path format
+        // This happens when the URL is incorrectly processed by path_utils
+        let actual_source = if source_path_str.contains("/https:/")
+            || source_path_str.contains("/http:/")
+            || source_path_str.contains("/git:/")
+        {
+            // Extract the URL part from the path
+            let parts: Vec<&str> = source_path_str.split('/').collect();
+            let mut url_parts = Vec::new();
+            let mut found_protocol = false;
+
+            for part in parts {
+                if part.contains(':') && (part == "https:" || part == "http:" || part == "git:") {
+                    found_protocol = true;
+                }
+
+                if found_protocol {
+                    url_parts.push(part);
+                }
+            }
+
+            // Reconstruct the URL
+            let url = url_parts.join("/");
+            debug!("Extracted URL from path: {url}");
+            url
+        } else {
+            source_path_str
+        };
+
+        // Create RepoSource based on the corrected source
+        let repo_source = RepoSource::new(&actual_source);
 
         let patches = vec!["0001-validation-assumeutxo-benchmarking-patches.patch".to_string()];
 
@@ -27,6 +61,7 @@ impl Builder {
                     anyhow::bail!("Source directory does not exist: {}", path.display());
                 }
 
+                debug!("Using local repository at: {}", path.display());
                 // We don't need a repo manager for local repos
                 Ok(Self {
                     config,
@@ -37,8 +72,10 @@ impl Builder {
             RepoSource::Remote(url) => {
                 // For remote repos, create a repository manager
                 info!("Using remote Git repository: {}", url);
-                let repo_cache_dir = config.bench.global.scratch.join("repos");
-                let repo_manager = RepositoryManager::new(&source_path, &repo_cache_dir);
+                // Use the scratch directory directly to avoid duplicate "repos" in path
+                let scratch_dir = config.bench.global.scratch.clone();
+                // Important: pass the raw URL string, not the processed path
+                let repo_manager = RepositoryManager::builder(url, &scratch_dir).build()?;
 
                 Ok(Self {
                     config,
@@ -55,6 +92,7 @@ impl Builder {
     }
 
     pub fn build(&mut self) -> Result<()> {
+        debug!("Starting build");
         // If we're using a remote repository, ensure it's available
         let source_dir = if let Some(repo_manager) = &mut self.repo_manager {
             let repo_path = repo_manager.ensure_repository_available()?;
@@ -64,6 +102,14 @@ impl Builder {
             // Using a local repository
             self.config.bench.global.source.clone()
         };
+
+        debug!("Using source_dir: {source_dir:?}");
+
+        // Verify this is a valid git repository before proceeding
+        let git_dir = source_dir.join(".git");
+        if !git_dir.exists() {
+            anyhow::bail!("Not a valid git repository: {}", source_dir.display());
+        }
 
         self.check_clean_worktree(&source_dir)?;
         // Get the initial reference to restore later
@@ -82,7 +128,6 @@ impl Builder {
             };
         }
 
-        // Restore the original git state
         self.restore_git_state(&source_dir, &initial_ref)?;
         Ok(())
     }
@@ -150,9 +195,11 @@ impl Builder {
             repo_manager.validate_commits(&self.config.bench.global.commits)?;
             repo_path
         } else {
+            // For local repos, use the path directly
             self.config.bench.global.source.clone()
         };
 
+        debug!("Testing patches on repository at: {source_dir:?}");
         self.check_clean_worktree(&source_dir)?;
         let initial_ref = self.get_initial_ref(&source_dir)?;
 
@@ -316,32 +363,26 @@ impl Builder {
             .join(format!("build-{}", commit_hash));
 
         info!("Making build dir: {:?}", dir);
-        fs::create_dir_all(&dir)?;
-        let canonical_dir = fs::canonicalize(&dir)?;
+        path_utils::ensure_directory(&dir)?;
+        let canonical_dir = dir.canonicalize()?;
 
-        // Run cmake configuration
+        // cmake configuration
         let mut cmd = Command::new("cmake");
         cmd.current_dir(source_dir).arg("-B").arg(&canonical_dir);
-
-        // Add default build flags
-        cmd.arg("-DBUILD_CLI=OFF").arg("-DBUILD_TESTS=OFF");
-
         // Add custom build flags if configured
         if let Some(cmake_args) = &self.config.bench.global.cmake_build_args {
             for arg in cmake_args {
                 cmd.arg(arg);
             }
         }
-
         let config_status = cmd
             .status()
             .with_context(|| format!("Failed to configure cmake for commit {}", commit_hash))?;
-
         if !config_status.success() {
             anyhow::bail!("CMake configuration failed for commit {}", commit_hash);
         }
 
-        // Run cmake build
+        // cmake build
         let mut cmd = Command::new("cmake");
         cmd.current_dir(source_dir)
             .arg("--build")
@@ -349,15 +390,12 @@ impl Builder {
             .arg("--target")
             .arg("bitcoind")
             .arg("--parallel");
-
         let build_status = cmd
             .status()
             .with_context(|| format!("Failed to build bitcoind for commit {commit_hash}"))?;
-
         if !build_status.success() {
             anyhow::bail!("CMake build failed for commit {commit_hash}");
         }
-
         Ok(())
     }
 
@@ -368,30 +406,22 @@ impl Builder {
             .global
             .scratch
             .join(format!("build-{}", commit_hash));
+
         let src_path = dir.clone().join("bin/bitcoind");
         let dest_path = self
             .config
             .app
             .bin_dir
             .join(format!("bitcoind-{}", commit_hash));
-        debug!("Copying {src_path:?} to {dest_path:?}");
 
-        // Make sure the destination directory exists
         if let Some(parent) = dest_path.parent() {
-            fs::create_dir_all(parent)?;
+            path_utils::ensure_directory(parent)?;
         }
 
-        std::fs::copy(&src_path, &dest_path)
+        path_utils::copy_file(&src_path, &dest_path)
             .with_context(|| format!("Failed to copy binary for commit {commit_hash}"))?;
-
-        std::fs::remove_dir_all(
-            self.config
-                .bench
-                .global
-                .scratch
-                .join(format!("build-{}", commit_hash)),
-        )
-        .with_context(|| {
+        // Clean up the build directory
+        std::fs::remove_dir_all(dir.clone()).with_context(|| {
             format!(
                 "Failed to cleanup extracted files for commit {} from {:?}",
                 commit_hash, dir
@@ -402,6 +432,7 @@ impl Builder {
     }
 
     fn restore_git_state(&self, source_dir: &PathBuf, initial_ref: &str) -> Result<()> {
+        debug!("restoring git state of {source_dir:?}");
         let status = Command::new("git")
             .current_dir(source_dir)
             .arg("checkout")

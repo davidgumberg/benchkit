@@ -2,6 +2,9 @@ use anyhow::{Context, Result};
 use hwloc::{CpuSet, ObjectType, Topology, CPUBIND_PROCESS};
 use log::{debug, info};
 
+// Re-export these for backward compatibility, but new code should use the CommandExecutor API
+pub use crate::command::CommandExecutor;
+
 /// Utility for CPU binding
 pub struct CpuBinder {
     topology: Topology,

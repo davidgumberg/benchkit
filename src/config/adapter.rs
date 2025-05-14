@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::benchmarks::config::{merge_benchmark_options, BenchmarkConfig, BenchmarkOptions};
+use crate::config::benchmark::{merge_benchmark_options, BenchmarkConfig, BenchmarkOptions};
 
 /// Adapter to convert benchmark configuration to the format needed by the runner
 pub struct ConfigAdapter;
@@ -12,6 +12,11 @@ impl ConfigAdapter {
         benchmark_index: usize,
     ) -> Result<BenchmarkOptions> {
         let benchmark = &config.benchmarks[benchmark_index];
-        merge_benchmark_options(&config.global.benchmark, &benchmark.benchmark)
+        let options = merge_benchmark_options(&config.global.benchmark, &benchmark.benchmark)?;
+
+        // Validate options for execution (including command presence)
+        options.validate_for_execution()?;
+
+        Ok(options)
     }
 }

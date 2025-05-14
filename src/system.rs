@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::Subcommand;
-use std::{fs, path::Path, process::Command};
+use std::{fs, path::Path};
+
+use crate::command::CommandExecutor;
 
 #[derive(Subcommand, Debug)]
 pub enum SystemCommands {
@@ -90,17 +92,27 @@ impl SystemChecker {
     }
 
     fn check_irqbalance() -> Result<bool> {
-        let status = Command::new("systemctl")
-            .args(["is-active", "irqbalance"])
-            .output()?;
-        Ok(status.status.success())
+        let executor = CommandExecutor::builder()
+            .name("Check IRQ balancing")
+            .allow_failure(true)
+            .build()?;
+
+        let output =
+            executor.execute_command_with_args("systemctl", &["is-active", "irqbalance"])?;
+        Ok(output.status.success())
     }
 
     fn set_irqbalance(&self, enable: bool) -> Result<()> {
         let action = if enable { "start" } else { "stop" };
-        Command::new("systemctl")
-            .args([action, "irqbalance"])
-            .status()?;
+
+        let executor = CommandExecutor::builder()
+            .name(format!(
+                "{} IRQ balancing",
+                if enable { "Start" } else { "Stop" }
+            ))
+            .build()?;
+
+        executor.execute_check_status("systemctl", &[action, "irqbalance"])?;
         Ok(())
     }
 

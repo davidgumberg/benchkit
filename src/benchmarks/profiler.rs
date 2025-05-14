@@ -39,30 +39,79 @@ pub struct ProfileResult {
     pub samples: Vec<ProfileSample>,
 }
 
+/// Builder for Profiler
+pub struct ProfilerBuilder {
+    /// Output directory path
+    output_dir: PathBuf,
+    /// Sample interval in seconds
+    sample_interval: u64,
+    /// CPU cores to bind the process to
+    benchmark_cores: Option<String>,
+    /// Custom output file name (defaults to "profile_data.json")
+    output_filename: Option<String>,
+}
+
+impl ProfilerBuilder {
+    /// Create a new ProfilerBuilder
+    pub fn new(output_dir: &Path) -> Self {
+        Self {
+            output_dir: output_dir.to_path_buf(),
+            sample_interval: 5, // Default 5 second interval
+            benchmark_cores: None,
+            output_filename: None,
+        }
+    }
+
+    /// Set the sample interval in seconds
+    pub fn sample_interval(mut self, interval: u64) -> Self {
+        self.sample_interval = interval;
+        self
+    }
+
+    /// Set CPU cores to bind the profiled process to
+    pub fn benchmark_cores(mut self, cores: Option<String>) -> Self {
+        self.benchmark_cores = cores;
+        self
+    }
+
+    /// Set custom output filename
+    pub fn output_filename(mut self, filename: impl Into<String>) -> Self {
+        self.output_filename = Some(filename.into());
+        self
+    }
+
+    /// Build the Profiler instance
+    pub fn build(self) -> Result<Profiler> {
+        // Create the output directory if it doesn't exist
+        if !self.output_dir.exists() {
+            std::fs::create_dir_all(&self.output_dir)?;
+        }
+
+        // Construct the output path
+        let filename = self
+            .output_filename
+            .unwrap_or_else(|| "profile_data.json".to_string());
+        let output_path = self.output_dir.join(filename);
+
+        Ok(Profiler {
+            output_path,
+            sample_interval: self.sample_interval,
+        })
+    }
+}
+
 /// The profiler that monitors system resources of a process and its children
 pub struct Profiler {
     /// Output file path
     output_path: PathBuf,
     /// Sample interval in seconds
     sample_interval: u64,
-    /// CPU cores to bind the process to
-    benchmark_cores: Option<String>,
 }
 
 impl Profiler {
-    pub fn new(output_dir: &Path, sample_interval: u64) -> Self {
-        let output_path = output_dir.join("profile_data.json");
-        Self {
-            output_path,
-            sample_interval,
-            benchmark_cores: None,
-        }
-    }
-
-    /// Set CPU cores to bind the profiled process to
-    pub fn with_benchmark_cores(mut self, cores: Option<String>) -> Self {
-        self.benchmark_cores = cores;
-        self
+    /// Create a new ProfilerBuilder
+    pub fn builder(output_dir: &Path) -> ProfilerBuilder {
+        ProfilerBuilder::new(output_dir)
     }
 
     /// Profile an already launched child process

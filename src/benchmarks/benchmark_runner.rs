@@ -1,89 +1,21 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
-use serde::{Deserialize, Serialize};
-use std::os::unix::process::CommandExt;
+use std::collections::HashMap;
 use std::os::unix::process::ExitStatusExt;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-    time::Instant,
-};
+use std::path::PathBuf;
+use std::time::Instant;
 
-use crate::cpu_binding::CpuBinder;
-
+use crate::benchmarks::export::ResultExporter;
 use crate::benchmarks::hook_runner::{HookArgs, HookRunner, HookStage};
-use crate::benchmarks::parameter::{ParameterList, ParameterMatrix};
+use crate::benchmarks::parameters::{ParameterList, ParameterMatrix, ParameterUtils};
 use crate::benchmarks::profiler::{ProfileResult, Profiler};
+use crate::benchmarks::results::{BenchmarkResult, ResultAnalyzer, RunResult};
+use crate::command::CommandExecutor;
 
-/// Results from a single benchmark run
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunResult {
-    /// The iteration number (0-indexed)
-    pub iteration: usize,
-    /// Duration in milliseconds
-    pub duration_ms: f64,
-    /// Exit code from the command
-    pub exit_code: i32,
-    /// Output from the command (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<String>,
-    /// Profiling results (optional)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profile: Option<ProfileResult>,
-}
-
-/// Statistical summary of benchmark runs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunSummary {
-    /// Minimum time in milliseconds
-    pub min: f64,
-    /// Maximum time in milliseconds
-    pub max: f64,
-    /// Mean time in milliseconds
-    pub mean: f64,
-    /// Median time in milliseconds
-    pub median: f64,
-    /// Standard deviation in milliseconds
-    pub std_dev: f64,
-}
-
-/// Relative speed comparison between benchmark runs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpeedComparison {
-    /// The command/parameters this comparison is made against
-    pub reference_label: String,
-    /// How many times faster this benchmark is compared to the reference
-    pub times_faster: f64,
-    /// Standard error of the times_faster value
-    pub error: f64,
-}
-
-/// Master summary comparing all benchmark runs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MasterSummary {
-    /// The fastest benchmark command
-    pub fastest_command: String,
-    /// The parameters used for the fastest benchmark
-    pub fastest_parameters: HashMap<String, String>,
-    /// Relative speed comparisons with other benchmarks
-    pub comparisons: Vec<SpeedComparison>,
-}
-
-/// Complete results from a benchmark
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BenchmarkResult {
-    /// The command that was executed
-    pub command: String,
-    /// Parameters used in the command
-    pub parameters: HashMap<String, String>,
-    /// Results from each run
-    pub runs: Vec<RunResult>,
-    /// Statistical summary
-    pub summary: RunSummary,
-}
-
-/// The BenchmarkRunner handles timing and execution of commands
+/// Low-level benchmark executor that handles the actual command execution and measurement
+/// It is created and configured by the Runner for each benchmark, and focuses
+/// solely on the execution details without knowledge of the broader configuration
+/// or benchmark selection.
 pub struct BenchmarkRunner {
     /// Hook runner for lifecycle scripts
     hook_runner: HookRunner,
@@ -101,12 +33,23 @@ pub struct BenchmarkRunner {
     benchmark_cores: Option<String>,
 }
 
-impl BenchmarkRunner {
-    /// Create a new BenchmarkRunner with a pre-configured HookRunner
-    pub fn new(out_dir: PathBuf, hook_runner: HookRunner, capture_output: bool) -> Self {
+/// Builder for BenchmarkRunner
+pub struct BenchmarkRunnerBuilder {
+    hook_runner: HookRunner,
+    capture_output: bool,
+    parameter_matrix: Option<ParameterMatrix>,
+    enable_profiling: bool,
+    out_dir: PathBuf,
+    profile_interval: u64,
+    benchmark_cores: Option<String>,
+}
+
+impl BenchmarkRunnerBuilder {
+    /// Create a new BenchmarkRunnerBuilder with required parameters
+    pub fn new(out_dir: PathBuf, hook_runner: HookRunner) -> Self {
         Self {
             hook_runner,
-            capture_output,
+            capture_output: false,
             parameter_matrix: None,
             enable_profiling: false,
             out_dir,
@@ -115,14 +58,20 @@ impl BenchmarkRunner {
         }
     }
 
+    /// Set whether to capture command output
+    pub fn capture_output(mut self, capture: bool) -> Self {
+        self.capture_output = capture;
+        self
+    }
+
     /// Set benchmark cores to constrain command execution
-    pub fn with_benchmark_cores(mut self, cores_spec: Option<String>) -> Self {
+    pub fn benchmark_cores(mut self, cores_spec: Option<String>) -> Self {
         self.benchmark_cores = cores_spec;
         self
     }
 
     /// Enable profiling with the specified sampling interval
-    pub fn with_profiling(mut self, enable: bool, interval: Option<u64>) -> Self {
+    pub fn profiling(mut self, enable: bool, interval: Option<u64>) -> Self {
         self.enable_profiling = enable;
         if let Some(interval) = interval {
             self.profile_interval = interval;
@@ -130,80 +79,34 @@ impl BenchmarkRunner {
         self
     }
 
-    /// Calculate a master summary for a set of benchmark results
-    pub fn calculate_master_summary(results: &[BenchmarkResult]) -> Option<MasterSummary> {
-        if results.is_empty() {
-            return None;
-        }
-
-        // Find the fastest benchmark based on mean duration
-        let fastest_idx = results
-            .iter()
-            .enumerate()
-            .min_by(|(_, a), (_, b)| {
-                a.summary
-                    .mean
-                    .partial_cmp(&b.summary.mean)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|(idx, _)| idx)
-            .unwrap_or(0);
-
-        let fastest = &results[fastest_idx];
-        let fastest_mean = fastest.summary.mean;
-
-        // Create comparisons for all other benchmarks
-        let mut comparisons = Vec::new();
-        for (i, result) in results.iter().enumerate() {
-            if i == fastest_idx {
-                continue; // Skip the fastest one (it would just be 1.0× faster than itself)
-            }
-
-            // Create a label from parameters
-            let param_str = if result.parameters.is_empty() {
-                "default".to_string()
-            } else {
-                result
-                    .parameters
-                    .iter()
-                    .map(|(k, v)| format!("{}={}", k, v))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-
-            // Calculate how many times slower this benchmark is
-            let times_slower = result.summary.mean / fastest_mean;
-
-            // Simple error propagation (approximate)
-            let relative_error_squared = (fastest.summary.std_dev / fastest_mean).powi(2)
-                + (result.summary.std_dev / result.summary.mean).powi(2);
-            let error = times_slower * relative_error_squared.sqrt();
-
-            comparisons.push(SpeedComparison {
-                reference_label: param_str,
-                times_faster: times_slower,
-                error,
-            });
-        }
-
-        // Sort comparisons by slowest first (largest times_faster value)
-        comparisons.sort_by(|a, b| {
-            b.times_faster
-                .partial_cmp(&a.times_faster)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        Some(MasterSummary {
-            fastest_command: fastest.command.clone(),
-            fastest_parameters: fastest.parameters.clone(),
-            comparisons,
-        })
-    }
-
     /// Set parameter lists for this benchmark runner
-    pub fn with_parameter_lists(mut self, parameter_lists: Vec<ParameterList>) -> Self {
+    pub fn parameter_lists(mut self, parameter_lists: Vec<ParameterList>) -> Self {
         self.parameter_matrix = Some(ParameterMatrix::new(&parameter_lists));
         self
+    }
+
+    /// Build the BenchmarkRunner, validating parameters if needed
+    pub fn build(self) -> Result<BenchmarkRunner> {
+        // Validate configuration if needed
+        // For example, ensure out_dir exists or can be created
+
+        // Create the BenchmarkRunner
+        Ok(BenchmarkRunner {
+            hook_runner: self.hook_runner,
+            capture_output: self.capture_output,
+            parameter_matrix: self.parameter_matrix,
+            enable_profiling: self.enable_profiling,
+            out_dir: self.out_dir,
+            profile_interval: self.profile_interval,
+            benchmark_cores: self.benchmark_cores,
+        })
+    }
+}
+
+impl BenchmarkRunner {
+    /// Create a builder for BenchmarkRunner
+    pub fn builder(out_dir: PathBuf, hook_runner: HookRunner) -> BenchmarkRunnerBuilder {
+        BenchmarkRunnerBuilder::new(out_dir, hook_runner)
     }
 
     /// Run a benchmark command with the specified number of runs
@@ -238,7 +141,7 @@ impl BenchmarkRunner {
 
         for i in 0..runs {
             // Create iteration-specific hook args with parameter directory
-            let params_dir = Self::params_to_dirname(params);
+            let params_dir = ParameterUtils::params_to_dirname(params);
             let iter_args = HookArgs {
                 iteration: i,
                 params_dir: params_dir.clone(),
@@ -282,7 +185,7 @@ impl BenchmarkRunner {
         self.hook_runner.run_hook(HookStage::Cleanup, hook_args)?;
 
         // Calculate statistics
-        let summary = self.calculate_summary(&results);
+        let summary = ResultAnalyzer::calculate_summary(&results);
 
         // Create the benchmark result
         let benchmark_result = BenchmarkResult {
@@ -300,80 +203,16 @@ impl BenchmarkRunner {
     fn launch_command_with_affinity(&self, command: &str) -> Result<std::process::Child> {
         debug!("Launching command with affinity: {}", command);
 
-        // Create a new command, setting process_group(0) to create a new process group
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c")
-            .arg(command)
-            // When profiling, we don't need to capture the output to pipes
-            // This prevents potential pipe buffer deadlocks
-            .stdout(if self.enable_profiling {
-                std::process::Stdio::null()
-            } else {
-                std::process::Stdio::piped()
-            })
-            .stderr(if self.enable_profiling {
-                std::process::Stdio::null()
-            } else {
-                std::process::Stdio::piped()
-            })
-            .process_group(0); // This creates a new process group with the same ID as the child's PID
+        // Create a command executor with our benchmark settings
+        let executor = CommandExecutor::builder()
+            .name(command.to_string())
+            .cpu_cores(self.benchmark_cores.clone())
+            .process_group(true)
+            .capture_output(!self.enable_profiling)
+            .build()?;
 
-        // Spawn the command
-        let child = cmd.spawn().context("Failed to spawn command")?;
-
-        // Get the PID, which is also the process group ID due to process_group(0)
-        let pid = child.id() as libc::pid_t;
-        debug!("Spawned process with PID {}, which is also the PGID", pid);
-
-        // If we have benchmark_cores, apply CPU affinity to the process and process group
-        if let Some(cores) = &self.benchmark_cores {
-            debug!("Binding process with PID {} to cores: {}", pid, cores);
-
-            // Create a new CPU binder for this operation
-            let mut cpu_binder = CpuBinder::new()?;
-
-            // First bind the individual process to the specified cores
-            cpu_binder.bind_pid_to_cores(pid, cores)?;
-
-            // Now try to bind the process group
-            // The process group binding might fail on some systems, but we'll try it anyway
-            let pgid = -pid; // Negative PID means process group in Linux scheduling APIs
-
-            // Use a separate block to capture any errors but continue execution
-            match cpu_binder.bind_pid_to_cores(pgid, cores) {
-                Ok(_) => debug!(
-                    "Successfully bound process group {} to cores {}",
-                    pid, cores
-                ),
-                Err(err) => {
-                    // Log the error but continue - individual process binding is already done
-                    debug!("Process group binding failed (non-critical): {}", err);
-                    debug!("Individual process binding was successful and should be inherited by children");
-                }
-            }
-        }
-
-        Ok(child)
-    }
-
-    /// Generate a directory name from parameters
-    fn params_to_dirname(params: &HashMap<String, String>) -> String {
-        // Filter out commit parameter as it's already part of the directory structure
-        let filtered_params: Vec<(&String, &String)> =
-            params.iter().filter(|(k, _)| *k != "commit").collect();
-
-        if filtered_params.is_empty() {
-            return "default".to_string();
-        }
-
-        // Sort params by key for consistent ordering
-        let mut param_strs: Vec<String> = filtered_params
-            .iter()
-            .map(|(k, v)| format!("{}-{}", k, v))
-            .collect();
-        param_strs.sort();
-
-        param_strs.join("_")
+        // Launch the command using the executor
+        executor.launch_command("sh", &["-c", command])
     }
 
     /// Execute a command and capture its output, optionally with profiling
@@ -383,13 +222,13 @@ impl BenchmarkRunner {
         iteration: usize,
         commit: &str,
         params: &HashMap<String, String>,
-    ) -> Result<(Output, Option<ProfileResult>)> {
+    ) -> Result<(std::process::Output, Option<ProfileResult>)> {
         debug!("Executing command: {}", command);
 
         // If profiling is enabled, use the profiler to execute the command
         if self.enable_profiling {
             // Create a directory structure with commit/params/iteration
-            let params_dir = Self::params_to_dirname(params);
+            let params_dir = ParameterUtils::params_to_dirname(params);
             let profile_out_dir = self
                 .out_dir
                 .join(commit)
@@ -398,8 +237,10 @@ impl BenchmarkRunner {
             std::fs::create_dir_all(&profile_out_dir)?;
 
             // Create the profiler with our benchmark cores
-            let mut profiler = Profiler::new(&profile_out_dir, self.profile_interval);
-            profiler = profiler.with_benchmark_cores(self.benchmark_cores.clone());
+            let mut profiler = Profiler::builder(&profile_out_dir)
+                .sample_interval(self.profile_interval)
+                .benchmark_cores(self.benchmark_cores.clone())
+                .build()?;
 
             // Launch the command using our helper, which handles CPU affinity
             info!("Profiling command: {}", command);
@@ -407,7 +248,7 @@ impl BenchmarkRunner {
             let profile_result = profiler.profile_process(command, child)?;
 
             // Make an Output manually for profile
-            let output = Output {
+            let output = std::process::Output {
                 status: ExitStatusExt::from_raw(profile_result.exit_code),
                 stdout: Vec::new(),
                 stderr: Vec::new(),
@@ -434,64 +275,6 @@ impl BenchmarkRunner {
         }
 
         Ok((output, None))
-    }
-
-    /// Calculate summary statistics from run results
-    fn calculate_summary(&self, results: &[RunResult]) -> RunSummary {
-        if results.is_empty() {
-            return RunSummary {
-                min: 0.0,
-                max: 0.0,
-                mean: 0.0,
-                median: 0.0,
-                std_dev: 0.0,
-            };
-        }
-
-        // Extract durations
-        let durations: Vec<f64> = results.iter().map(|r| r.duration_ms).collect();
-
-        // Calculate min and max
-        let min = *durations
-            .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
-        let max = *durations
-            .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
-
-        // Calculate mean
-        let mean = durations.iter().sum::<f64>() / durations.len() as f64;
-
-        // Calculate median
-        let mut sorted_durations = durations.clone();
-        sorted_durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = if sorted_durations.len() % 2 == 0 {
-            let mid = sorted_durations.len() / 2;
-            (sorted_durations[mid - 1] + sorted_durations[mid]) / 2.0
-        } else {
-            sorted_durations[sorted_durations.len() / 2]
-        };
-
-        // Calculate standard deviation
-        let variance: f64 = durations
-            .iter()
-            .map(|d| {
-                let diff = d - mean;
-                diff * diff
-            })
-            .sum::<f64>()
-            / durations.len() as f64;
-        let std_dev = variance.sqrt();
-
-        RunSummary {
-            min,
-            max,
-            mean,
-            median,
-            std_dev,
-        }
     }
 
     /// Run all parameter combinations for a command template
@@ -532,41 +315,16 @@ impl BenchmarkRunner {
         Ok(results)
     }
 
-    pub fn export_json(result: &BenchmarkResult, path: &Path) -> Result<()> {
-        let json_data = serde_json::to_string_pretty(result)
-            .context("Failed to serialize benchmark results")?;
+    // Export methods - delegating to the ResultExporter
 
-        std::fs::write(path, json_data).context("Failed to write benchmark results to file")?;
-
-        Ok(())
+    pub fn export_json(result: &BenchmarkResult, path: &impl AsRef<std::path::Path>) -> Result<()> {
+        ResultExporter::export_json(result, path.as_ref())
     }
 
-    pub fn export_json_multiple(results: &[BenchmarkResult], path: &Path) -> Result<()> {
-        // Calculate master summary if there are multiple results
-        let master_summary = if results.len() > 1 {
-            Self::calculate_master_summary(results)
-        } else {
-            None
-        };
-
-        // Create a combined structure with both results and summary
-        #[derive(Serialize)]
-        struct ExportData<'a> {
-            results: &'a [BenchmarkResult],
-            #[serde(skip_serializing_if = "Option::is_none")]
-            master_summary: Option<MasterSummary>,
-        }
-
-        let export_data = ExportData {
-            results,
-            master_summary,
-        };
-
-        let json_data = serde_json::to_string_pretty(&export_data)
-            .context("Failed to serialize benchmark results")?;
-
-        std::fs::write(path, json_data).context("Failed to write benchmark results to file")?;
-
-        Ok(())
+    pub fn export_json_multiple(
+        results: &[BenchmarkResult],
+        path: &impl AsRef<std::path::Path>,
+    ) -> Result<()> {
+        ResultExporter::export_json_multiple(results, path.as_ref())
     }
 }

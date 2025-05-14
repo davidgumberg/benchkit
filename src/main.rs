@@ -1,7 +1,8 @@
+#![warn(unused_extern_crates)]
 use anyhow::Result;
 use benchkit::{
-    benchmarks::{self, load_bench_config, BenchmarkConfig},
-    config::{load_app_config, AppConfig, GlobalConfig},
+    benchmarks,
+    config::{load_app_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
     download::download_snapshot,
     system::SystemChecker,
     types::Network,
@@ -140,9 +141,8 @@ fn main() -> Result<()> {
             let mut builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
             if let Some(runner_cores) = &config.bench.global.runner_cores {
-                let mut cpu_binder = benchkit::cpu_binding::CpuBinder::new()?;
-                info!("Binding main benchkit process to cores: {}", runner_cores);
-                cpu_binder.bind_current_process_to_cores(runner_cores)?;
+                use benchkit::command::CommandExecutor;
+                CommandExecutor::bind_current_process_to_cores(runner_cores)?;
             }
             let runner = benchmarks::Runner::new(config.clone(), out_dir.clone())?;
             runner.run(name.as_deref())?;

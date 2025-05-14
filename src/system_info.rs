@@ -4,11 +4,19 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+use crate::path_utils;
+
 use sysinfo::System;
 
 #[rustfmt::skip]
 pub fn dump_sys_info(file: &PathBuf) -> Result<()> {
     info!("Writing system info to {file:?}");
+
+    // Ensure parent directory exists
+    if let Some(parent) = file.parent() {
+        path_utils::ensure_directory(parent)?;
+    }
+
     let mut file = File::create(file)?;
     let mut sys = System::new_all();
     sys.refresh_all();

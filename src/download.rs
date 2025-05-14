@@ -1,4 +1,6 @@
+use crate::path_utils;
 use crate::types::Network;
+use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use reqwest::blocking::Client;
@@ -32,7 +34,10 @@ impl SnapshotInfo {
 
 const SNAPSHOT_HOST: &str = "https://utxo.download/";
 
-pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow::Result<()> {
+pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> Result<()> {
+    // Make sure the snapshot directory exists
+    path_utils::ensure_directory(snapshot_dir)?;
+
     let snapshot_info = SnapshotInfo::for_network(network)
         .ok_or_else(|| anyhow::anyhow!("No snapshot available for network {:?}", network))?;
     let filename = snapshot_info.filename;
@@ -51,7 +56,6 @@ pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> anyhow::Resu
         ProgressStyle::default_bar()
             .template("[{elapsed_precise}] [{bar:60.magenta/black}] {bytes}/{total_bytes} ({eta})")
             .unwrap()
-            // .progress_chars("█▓▒░  "),
             .progress_chars("⟨⟨⟨⟨⟨····· "),
     );
 

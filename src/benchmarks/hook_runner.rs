@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use log::debug;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Command;
+
+use crate::command::{CommandContext, CommandExecutor};
 
 /// Represents the different hook script stages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,6 +49,46 @@ pub struct HookArgs {
     pub params_dir: String,
 }
 
+/// Builder for HookRunner
+pub struct HookRunnerBuilder {
+    /// Directory containing hook scripts
+    script_dir: PathBuf,
+    /// Custom script paths for specific stages (overrides defaults)
+    custom_scripts: HashMap<HookStage, PathBuf>,
+}
+
+impl HookRunnerBuilder {
+    /// Create a new HookRunnerBuilder with the script directory
+    pub fn new(script_dir: PathBuf) -> Self {
+        Self {
+            script_dir,
+            custom_scripts: HashMap::new(),
+        }
+    }
+
+    /// Add a custom script for a specific stage
+    pub fn custom_script(mut self, stage: HookStage, script_path: PathBuf) -> Self {
+        self.custom_scripts.insert(stage, script_path);
+        self
+    }
+
+    /// Build the HookRunner instance
+    pub fn build(self) -> Result<HookRunner> {
+        // Validate that the script directory exists
+        if !self.script_dir.exists() {
+            return Err(anyhow::anyhow!(
+                "Script directory does not exist: {}",
+                self.script_dir.display()
+            ));
+        }
+
+        Ok(HookRunner {
+            script_dir: self.script_dir,
+            custom_scripts: self.custom_scripts,
+        })
+    }
+}
+
 /// HookRunner manages the lifecycle scripts for benchmarks
 pub struct HookRunner {
     /// Directory containing hook scripts
@@ -65,23 +106,25 @@ impl HookRunner {
         }
     }
 
-    /// Add custom script for a specific stage
+    /// Create a new HookRunnerBuilder
+    pub fn builder(script_dir: PathBuf) -> HookRunnerBuilder {
+        HookRunnerBuilder::new(script_dir)
+    }
+
+    /// Add benchmark-specific script
     pub fn with_custom_script(mut self, stage: HookStage, script_path: PathBuf) -> Self {
         self.custom_scripts.insert(stage, script_path);
         self
     }
 
-    /// Run a hook script for the given stage with the provided arguments
+    /// Run a hook script for the stage
     pub fn run_hook(&self, stage: HookStage, args: &HookArgs) -> Result<()> {
-        // Check if we have a custom script for this stage
         let script_path = if let Some(custom_path) = self.custom_scripts.get(&stage) {
             custom_path.clone()
         } else {
-            // Otherwise use the default script
             self.script_dir.join(stage.script_name())
         };
 
-        // Check if the script exists
         if !script_path.exists() {
             debug!("Script {} does not exist, skipping", script_path.display());
             return Ok(());
@@ -93,30 +136,35 @@ impl HookRunner {
             script_path.display()
         );
 
-        // Build command with named arguments
-        let mut cmd = Command::new(&script_path);
-
         // Replace {commit} placeholder in binary path with actual commit
         let binary_path = args.binary.replace("{commit}", &args.commit);
 
-        cmd.arg(format!("--binary={}", binary_path))
-            .arg(format!("--connect={}", args.connect_address))
-            .arg(format!("--network={}", args.network))
-            .arg(format!("--out-dir={}", args.out_dir.display()))
-            .arg(format!("--snapshot={}", args.snapshot_path.display()))
-            .arg(format!("--datadir={}", args.tmp_data_dir.display()))
-            .arg(format!("--iteration={}", args.iteration))
-            .arg(format!("--commit={}", args.commit));
-
-        // Always add params directory
-        cmd.arg(format!("--params-dir={}", args.params_dir));
-
-        // Run the command
-        let status = cmd.status().context(format!(
-            "Failed to execute {} script",
-            format!("{:?}", stage).to_lowercase()
-        ))?;
-
+        let script_args = vec![
+            format!("--binary={}", binary_path),
+            format!("--connect={}", args.connect_address),
+            format!("--network={}", args.network),
+            format!("--out-dir={}", args.out_dir.display()),
+            format!("--snapshot={}", args.snapshot_path.display()),
+            format!("--datadir={}", args.tmp_data_dir.display()),
+            format!("--iteration={}", args.iteration),
+            format!("--commit={}", args.commit),
+            format!("--params-dir={}", args.params_dir),
+        ];
+        let script_args_refs: Vec<&str> = script_args.iter().map(|s| s.as_str()).collect();
+        let context = CommandContext {
+            command_name: Some(format!("{:?} script", stage)),
+            allow_failure: false,
+            ..CommandContext::default()
+        };
+        let executor = CommandExecutor::with_context(context);
+        let status = executor
+            .execute_check_status(script_path.to_str().unwrap_or_default(), &script_args_refs)
+            .with_context(|| {
+                format!(
+                    "Failed to execute {} script",
+                    format!("{:?}", stage).to_lowercase()
+                )
+            })?;
         if !status.success() {
             return Err(anyhow::anyhow!(
                 "{} script failed with status {}",

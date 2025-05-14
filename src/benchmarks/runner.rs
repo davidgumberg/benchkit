@@ -3,44 +3,46 @@ use clap::ValueEnum;
 use log::{debug, info};
 use std::path::{Path, PathBuf};
 
-use crate::benchmarks::config::SingleConfig;
-use crate::benchmarks::config_adapter::ConfigAdapter;
 use crate::benchmarks::hook_runner::HookArgs;
-use crate::benchmarks::parameter::ParameterList;
-use crate::config::GlobalConfig;
+use crate::benchmarks::parameters::ParameterList;
+use crate::config::{ConfigAdapter, GlobalConfig, SingleConfig};
 use crate::download::SnapshotInfo;
+use crate::path_utils;
 use crate::types::Network;
 
-/// The runner for benchmarks
-pub struct MainRunner {
+/// High-level benchmark orchestrator that coordinates benchmark execution
+///
+/// The Runner is responsible for:
+/// 1. Managing configuration and settings
+/// 2. Setting up directories and copying configuration files
+/// 3. Selecting and iterating through benchmarks to run
+/// 4. Creating and configuring BenchmarkRunner instances for actual execution
+/// 5. Handling environment setup like snapshots
+///
+/// It delegates the actual benchmark execution to BenchmarkRunner instances
+/// which handle the low-level details of running commands and measuring performance.
+pub struct Runner {
+    /// Global configuration for the application and benchmarks
     global_config: GlobalConfig,
+    /// Directory to store benchmark outputs and results
     out_dir: PathBuf,
 }
 
-impl MainRunner {
-    /// Create a new MainRunner
+impl Runner {
+    /// Create a new Runner
     pub fn new(global_config: GlobalConfig, out_dir: PathBuf) -> Result<Self> {
         debug!("Using output directory: {}", out_dir.display());
-        std::fs::create_dir_all(&out_dir)?;
 
-        if std::fs::read_dir(&out_dir)?.next().is_some() {
-            anyhow::bail!(
-                "Output directory '{}' is not empty. Please clear it before running benchmarks",
-                out_dir.display()
-            );
-        }
+        // Create output directory and check it's empty
+        path_utils::prepare_output_directory(&out_dir)?;
 
         // Copy config files to output directory
         let app_config_name = global_config.app.path.file_name().unwrap_or_default();
         let bench_config_name = global_config.bench.path.file_name().unwrap_or_default();
-        std::fs::copy(
-            global_config.app.path.clone(),
-            out_dir.join(app_config_name),
-        )?;
-        std::fs::copy(
-            global_config.bench.path.clone(),
-            out_dir.join(bench_config_name),
-        )?;
+
+        path_utils::copy_file(&global_config.app.path, &out_dir.join(app_config_name))?;
+
+        path_utils::copy_file(&global_config.bench.path, &out_dir.join(bench_config_name))?;
 
         // Dump system info
         crate::system_info::dump_sys_info(&out_dir.join("system_info"))?;
@@ -113,28 +115,14 @@ This can be downloaded with `benchkit snapshot download {}`",
         let options = ConfigAdapter::get_merged_options(&self.global_config.bench, index)?;
 
         // Create parameter lists for substitution
-        let mut parameter_lists = Vec::new();
-        if let Some(params) = &options.parameter_lists {
-            for param in params {
-                if let Some(var) = param.get("var").and_then(|v| v.as_str()) {
-                    let values = if let Some(vals) = param.get("values").and_then(|v| v.as_array())
-                    {
-                        vals.iter()
-                            .map(|v| v.as_str().unwrap_or_default().to_string())
-                            .collect()
-                    } else if let Some(vals) = param.get("values").and_then(|v| v.as_str()) {
-                        vals.split(',').map(|s| s.trim().to_string()).collect()
-                    } else {
-                        Vec::new()
-                    };
-
-                    parameter_lists.push(ParameterList {
-                        var: var.to_string(),
-                        values,
-                    });
-                }
-            }
-        }
+        let mut parameter_lists = if let Some(params) = &options.parameter_lists {
+            crate::benchmarks::parameters::ParameterUtils::create_parameter_lists(
+                &serde_json::Value::Array(params.clone()),
+            )
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         // Add commits parameter list if not already present
         if !parameter_lists.iter().any(|list| list.var == "commit") {
@@ -148,7 +136,8 @@ This can be downloaded with `benchkit snapshot download {}`",
         let script_dir = PathBuf::from("scripts");
 
         // Create hook runner with script overrides if specified in the benchmark
-        let mut hook_runner = crate::benchmarks::hook_runner::HookRunner::new(script_dir.clone());
+        let mut hook_builder =
+            crate::benchmarks::hook_runner::HookRunner::builder(script_dir.clone());
 
         // Check if the benchmark has custom scripts defined
         if let Some(script_overrides) = &bench.scripts {
@@ -166,21 +155,24 @@ This can be downloaded with `benchkit snapshot download {}`",
                         "Using custom {} script for benchmark '{}': {}",
                         stage_name, bench.name, script_path
                     );
-                    hook_runner =
-                        hook_runner.with_custom_script(hook_stage, PathBuf::from(script_path));
+                    hook_builder =
+                        hook_builder.custom_script(hook_stage, PathBuf::from(script_path));
                 }
             }
         }
 
+        let hook_runner = hook_builder.build()?;
+
         // Create benchmark runner with optional profiling
-        let benchmark_runner = crate::benchmarks::benchmark_runner::BenchmarkRunner::new(
+        let benchmark_runner = crate::benchmarks::benchmark_runner::BenchmarkRunner::builder(
             self.out_dir.clone(),
             hook_runner,
-            options.capture_output,
         )
-        .with_parameter_lists(parameter_lists)
-        .with_profiling(options.profile.unwrap_or(false), options.profile_interval)
-        .with_benchmark_cores(self.global_config.bench.global.benchmark_cores.clone());
+        .capture_output(options.capture_output)
+        .parameter_lists(parameter_lists)
+        .profiling(options.profile.unwrap_or(false), options.profile_interval)
+        .benchmark_cores(self.global_config.bench.global.benchmark_cores.clone())
+        .build()?;
 
         // Get snapshot info
         let snapshot_path = if let Some(snapshot_info) = SnapshotInfo::for_network(

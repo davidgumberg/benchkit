@@ -1,7 +1,8 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// A parameter list from the benchmark configuration
+/// A parameter list from the benchmark config
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterList {
     /// The variable name to use in command templates
@@ -71,6 +72,10 @@ impl ParameterMatrix {
         &self,
         command_template: &str,
     ) -> Vec<(String, HashMap<String, String>)> {
+        if self.combinations.is_empty() {
+            return vec![(command_template.to_string(), HashMap::new())];
+        }
+
         let mut commands = Vec::new();
 
         for params in &self.combinations {
@@ -79,6 +84,61 @@ impl ParameterMatrix {
         }
 
         commands
+    }
+}
+
+/// Utilities for working with parameter combinations
+pub struct ParameterUtils;
+
+impl ParameterUtils {
+    /// Generate a directory name from a set of parameters
+    pub fn params_to_dirname(params: &HashMap<String, String>) -> String {
+        // Filter out commit parameter as it's already part of the directory structure
+        let filtered_params: Vec<(&String, &String)> =
+            params.iter().filter(|(k, _)| *k != "commit").collect();
+
+        if filtered_params.is_empty() {
+            return "default".to_string();
+        }
+
+        // Sort params for consistent ordering
+        let mut param_strs: Vec<String> = filtered_params
+            .iter()
+            .map(|(k, v)| format!("{}-{}", k, v))
+            .collect();
+        param_strs.sort();
+
+        param_strs.join("_")
+    }
+
+    /// Create parameter lists from benchmark configuration
+    pub fn create_parameter_lists(values_json: &serde_json::Value) -> Result<Vec<ParameterList>> {
+        let mut parameter_lists = Vec::new();
+
+        // Check if it's an array of parameter definitions
+        if let Some(params) = values_json.as_array() {
+            for param in params {
+                if let Some(var) = param.get("var").and_then(|v| v.as_str()) {
+                    let values = if let Some(vals) = param.get("values").and_then(|v| v.as_array())
+                    {
+                        vals.iter()
+                            .map(|v| v.as_str().unwrap_or_default().to_string())
+                            .collect()
+                    } else if let Some(vals) = param.get("values").and_then(|v| v.as_str()) {
+                        vals.split(',').map(|s| s.trim().to_string()).collect()
+                    } else {
+                        Vec::new()
+                    };
+
+                    parameter_lists.push(ParameterList {
+                        var: var.to_string(),
+                        values,
+                    });
+                }
+            }
+        }
+
+        Ok(parameter_lists)
     }
 }
 
@@ -151,5 +211,26 @@ mod tests {
         assert_eq!(commands.len(), 2);
         assert_eq!(commands[0].0, "test a command");
         assert_eq!(commands[1].0, "test b command");
+    }
+
+    #[test]
+    fn test_params_to_dirname() {
+        let mut params = HashMap::new();
+        params.insert("foo".to_string(), "bar".to_string());
+        params.insert("baz".to_string(), "qux".to_string());
+
+        let dirname = ParameterUtils::params_to_dirname(&params);
+        assert_eq!(dirname, "baz-qux_foo-bar");
+
+        // Test with commit parameter which should be filtered out
+        params.insert("commit".to_string(), "abc123".to_string());
+        let dirname = ParameterUtils::params_to_dirname(&params);
+        assert_eq!(dirname, "baz-qux_foo-bar");
+
+        // Test with empty params after filtering
+        let mut params = HashMap::new();
+        params.insert("commit".to_string(), "abc123".to_string());
+        let dirname = ParameterUtils::params_to_dirname(&params);
+        assert_eq!(dirname, "default");
     }
 }

@@ -42,6 +42,7 @@
               hwloc
               libevent
               rust-bin.stable.latest.default
+              # rust-bin.nightly.latest.default
               sqlite
               stress
             ];

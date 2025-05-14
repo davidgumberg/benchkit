@@ -17,15 +17,11 @@ impl RepoSource {
     /// Create a new RepoSource from a source string
     /// This will detect if the source is a URL or a local path
     pub fn new(source: &str) -> Self {
-        // Try to parse as URL first
         if let Ok(url) = Url::parse(source) {
-            // Valid URL schemes for Git
             if url.scheme() == "http" || url.scheme() == "https" || url.scheme() == "git" {
                 return RepoSource::Remote(source.to_string());
             }
         }
-
-        // Check for SSH-style Git URLs (git@github.com:user/repo.git)
         if source.starts_with("git@") && source.contains(':') && source.ends_with(".git") {
             return RepoSource::Remote(source.to_string());
         }
@@ -59,6 +55,100 @@ impl RepoSource {
     }
 }
 
+/// Builder for RepositoryManager
+pub struct RepositoryManagerBuilder {
+    /// The source of the repository (local or remote)
+    source: RepoSource,
+    /// Directory to store cloned repositories
+    cache_dir: PathBuf,
+    /// Custom repository name for caching
+    custom_repo_name: Option<String>,
+    /// Skip validation of repository structure
+    skip_validation: bool,
+}
+
+impl RepositoryManagerBuilder {
+    /// Create a new RepositoryManagerBuilder with required parameters
+    pub fn new(source: &str, scratch_dir: &Path) -> Self {
+        let repo_source = RepoSource::new(source);
+
+        // Create a repos directory in scratch_dir if not already there
+        let cache_dir = if scratch_dir.ends_with("repos") {
+            scratch_dir.to_path_buf()
+        } else {
+            scratch_dir.join("repos")
+        };
+
+        Self {
+            source: repo_source,
+            cache_dir,
+            custom_repo_name: None,
+            skip_validation: false,
+        }
+    }
+
+    /// Set a custom repository name for caching
+    /// This overrides the auto-generated name from the source
+    pub fn custom_repo_name(mut self, name: impl Into<String>) -> Self {
+        self.custom_repo_name = Some(name.into());
+        self
+    }
+
+    /// Set the cache directory to use
+    pub fn cache_dir(mut self, dir: impl AsRef<Path>) -> Self {
+        self.cache_dir = dir.as_ref().to_path_buf();
+        self
+    }
+
+    /// Skip validation of repository structure
+    pub fn skip_validation(mut self, skip: bool) -> Self {
+        self.skip_validation = skip;
+        self
+    }
+
+    /// Build the RepositoryManager
+    pub fn build(self) -> Result<RepositoryManager> {
+        // Create the cache directory if it doesn't exist
+        if !self.cache_dir.exists() {
+            std::fs::create_dir_all(&self.cache_dir)?;
+        }
+
+        debug!("Repository cache directory: {}", self.cache_dir.display());
+
+        // If we're not skipping validation, do some checks based on the source type
+        if !self.skip_validation {
+            match &self.source {
+                RepoSource::Local(path) => {
+                    // Check that the local path exists
+                    if !path.exists() {
+                        return Err(anyhow::anyhow!(
+                            "Local repository path does not exist: {}",
+                            path.display()
+                        ));
+                    }
+                }
+                RepoSource::Remote(url) => {
+                    // Minimal URL validation (a more comprehensive check would try to parse the URL)
+                    if !(url.starts_with("http://")
+                        || url.starts_with("https://")
+                        || url.starts_with("git://")
+                        || url.starts_with("git@"))
+                    {
+                        return Err(anyhow::anyhow!("Invalid Git URL format: {}", url));
+                    }
+                }
+            }
+        }
+
+        Ok(RepositoryManager {
+            source: self.source,
+            cache_dir: self.cache_dir,
+            repo_path: None,
+            custom_repo_name: self.custom_repo_name,
+        })
+    }
+}
+
 /// Manages Git repositories for benchmarking
 pub struct RepositoryManager {
     /// The source of the repository (local or remote)
@@ -67,19 +157,35 @@ pub struct RepositoryManager {
     cache_dir: PathBuf,
     /// Path to the actual repository to use (either original local path or cloned path)
     repo_path: Option<PathBuf>,
+    /// Custom repository name for caching
+    custom_repo_name: Option<String>,
 }
 
 impl RepositoryManager {
     /// Create a new repository manager
     pub fn new(source: &str, scratch_dir: &Path) -> Self {
         let repo_source = RepoSource::new(source);
-        let cache_dir = scratch_dir.join("repos");
+
+        // Create a repos directory in scratch_dir if not already there
+        let cache_dir = if scratch_dir.ends_with("repos") {
+            scratch_dir.to_path_buf()
+        } else {
+            scratch_dir.join("repos")
+        };
+
+        debug!("Repository cache directory: {}", cache_dir.display());
 
         Self {
             source: repo_source,
             cache_dir,
             repo_path: None,
+            custom_repo_name: None,
         }
+    }
+
+    /// Create a new RepositoryManagerBuilder
+    pub fn builder(source: &str, scratch_dir: &Path) -> RepositoryManagerBuilder {
+        RepositoryManagerBuilder::new(source, scratch_dir)
     }
 
     /// Ensure the repository is available locally
@@ -106,7 +212,10 @@ impl RepositoryManager {
             }
             RepoSource::Remote(url) => {
                 // For remote repos, check if we have it cached already
-                let repo_name = self.source.get_cache_name();
+                let repo_name = self
+                    .custom_repo_name
+                    .clone()
+                    .unwrap_or_else(|| self.source.get_cache_name());
                 let repo_path = self.cache_dir.join(&repo_name);
 
                 if repo_path.exists() {
