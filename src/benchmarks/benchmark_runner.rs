@@ -102,10 +102,10 @@ pub struct BenchmarkRunner {
 }
 
 impl BenchmarkRunner {
-    /// Create a new BenchmarkRunner
-    pub fn new(out_dir: PathBuf, script_dir: PathBuf, capture_output: bool) -> Self {
+    /// Create a new BenchmarkRunner with a pre-configured HookRunner
+    pub fn new(out_dir: PathBuf, hook_runner: HookRunner, capture_output: bool) -> Self {
         Self {
-            hook_runner: HookRunner::new(script_dir),
+            hook_runner,
             capture_output,
             parameter_matrix: None,
             enable_profiling: false,
@@ -234,7 +234,6 @@ impl BenchmarkRunner {
 
         // Run the setup script once before all benchmark runs
         self.hook_runner.run_hook(HookStage::Setup, hook_args)?;
-
         let mut results = Vec::with_capacity(runs);
 
         for i in 0..runs {
@@ -248,13 +247,8 @@ impl BenchmarkRunner {
 
             // Run prepare script before the benchmark run
             self.hook_runner.run_hook(HookStage::Prepare, &iter_args)?;
-
-            // Start timing
             let start = Instant::now();
-
-            // Execute command with profiling if enabled
             let (output, profile_result) = self.execute_command(command, i, commit, params)?;
-
             // Stop timing (if we're not profiling, otherwise the profiler takes care of timing)
             let duration = start.elapsed();
             let duration_ms = if let Some(profile) = &profile_result {

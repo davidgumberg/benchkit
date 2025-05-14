@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use log::debug;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 
 /// Represents the different hook script stages
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HookStage {
     Setup,
     Prepare,
@@ -51,17 +52,34 @@ pub struct HookArgs {
 pub struct HookRunner {
     /// Directory containing hook scripts
     script_dir: PathBuf,
+    /// Custom script paths for specific stages (overrides defaults)
+    custom_scripts: HashMap<HookStage, PathBuf>,
 }
 
 impl HookRunner {
     /// Create a new HookRunner
     pub fn new(script_dir: PathBuf) -> Self {
-        Self { script_dir }
+        Self {
+            script_dir,
+            custom_scripts: HashMap::new(),
+        }
+    }
+
+    /// Add custom script for a specific stage
+    pub fn with_custom_script(mut self, stage: HookStage, script_path: PathBuf) -> Self {
+        self.custom_scripts.insert(stage, script_path);
+        self
     }
 
     /// Run a hook script for the given stage with the provided arguments
     pub fn run_hook(&self, stage: HookStage, args: &HookArgs) -> Result<()> {
-        let script_path = self.script_dir.join(stage.script_name());
+        // Check if we have a custom script for this stage
+        let script_path = if let Some(custom_path) = self.custom_scripts.get(&stage) {
+            custom_path.clone()
+        } else {
+            // Otherwise use the default script
+            self.script_dir.join(stage.script_name())
+        };
 
         // Check if the script exists
         if !script_path.exists() {

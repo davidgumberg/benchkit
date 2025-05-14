@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -ex
-echo "Running cleanup.sh"
+echo "Running prepare.sh"
 
 # Process only needed parameters
 while [ $# -gt 0 ]; do
@@ -9,7 +9,7 @@ while [ $# -gt 0 ]; do
       TMP_DATADIR="${1#*=}"
       ;;
     # Accept but ignore other parameters
-    --binary=* | --connect=* | --network=* | --out-dir=* | --snapshot=* | --iteration=* | --commit=* | --params-dir=*)
+    --binary=* | --connect=* | --network=* | --snapshot=* | --out-dir=* | --iteration=* | --commit=* | --params-dir=*)
       # Just skip these parameters silently
       ;;
     *)
@@ -20,5 +20,5 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-echo "Final cleanup of datadir ${TMP_DATADIR}"
-rm -Rf "${TMP_DATADIR:?}"/*
+mkdir -p "${TMP_DATADIR}"
+rm -Rf "${TMP_DATADIR:?}/*"

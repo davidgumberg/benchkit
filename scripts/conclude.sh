@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 echo "Running conclude.sh"
 
 # Process only needed parameters

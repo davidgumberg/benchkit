@@ -3,7 +3,8 @@
 global:
 
   # Global benchmark option defaults.
-  # Will be overwritten by local options specified per-benchmark.
+  # "benchmark" and "script" values will be overwritten by local options
+  # specified per-benchmark.
   benchmark:
     warmup: 1
     runs: 5
@@ -11,7 +12,7 @@ global:
     profile: true
     profile_interval: 1
 
-  # Script hooks for benchmark lifecycle
+  # Global default script hooks for benchmarks
   scripts:
     setup: ./scripts/setup.sh
     prepare: ./scripts/prepare.sh
@@ -73,3 +74,18 @@ benchmarks:
           # A list of values to substitute in.
           values: ["450", "32000"]
 
+  - name: "signet no assumeutxo"
+    network: signet
+    connect: 127.0.0.1:39333
+    scripts:
+      # Use a custom prepare script which does not do assumeutxo syncing
+      # for a full IBD benchmark to stopheight
+      prepare: ./scripts/prepare-noassumeutxo.sh
+    benchmark:
+      command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
+      profile_interval: 1
+      warmup: 0
+      runs: 1
+      parameter_lists:
+        - var: dbcache
+          values: ["32000"]

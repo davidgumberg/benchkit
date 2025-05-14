@@ -144,10 +144,38 @@ This can be downloaded with `benchkit snapshot download {}`",
             });
         }
 
+        // Base script directory
+        let script_dir = PathBuf::from("scripts");
+
+        // Create hook runner with script overrides if specified in the benchmark
+        let mut hook_runner = crate::benchmarks::hook_runner::HookRunner::new(script_dir.clone());
+
+        // Check if the benchmark has custom scripts defined
+        if let Some(script_overrides) = &bench.scripts {
+            for (stage_name, script_path) in script_overrides {
+                let stage = match stage_name.as_str() {
+                    "setup" => Some(crate::benchmarks::hook_runner::HookStage::Setup),
+                    "prepare" => Some(crate::benchmarks::hook_runner::HookStage::Prepare),
+                    "conclude" => Some(crate::benchmarks::hook_runner::HookStage::Conclude),
+                    "cleanup" => Some(crate::benchmarks::hook_runner::HookStage::Cleanup),
+                    _ => None,
+                };
+
+                if let Some(hook_stage) = stage {
+                    debug!(
+                        "Using custom {} script for benchmark '{}': {}",
+                        stage_name, bench.name, script_path
+                    );
+                    hook_runner =
+                        hook_runner.with_custom_script(hook_stage, PathBuf::from(script_path));
+                }
+            }
+        }
+
         // Create benchmark runner with optional profiling
         let benchmark_runner = crate::benchmarks::benchmark_runner::BenchmarkRunner::new(
             self.out_dir.clone(),
-            PathBuf::from("scripts"),
+            hook_runner,
             options.capture_output,
         )
         .with_parameter_lists(parameter_lists)
