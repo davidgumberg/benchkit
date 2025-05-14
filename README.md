@@ -18,7 +18,25 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core.
 
 - Rust 1.84.1 or later
 - Nix package manager
-- (if not useing nix flake) hwloc library (only if using CPU affinity control)
+
+If not using Nix package manager and project flake:
+
+- Bitcoin Core build deps, e.g. [build.md](https://github.com/bitcoin/bitcoin/blob/master/doc/build-unix.md)
+- Cargo/rustc
+- `hwloc` library (only if using CPU affinity control)
+
+## Quickstart
+
+```bash
+git clone https://github.com/bitcoin-dev-tools/benchkit.git && cd benchkit
+cargo install --path .
+
+benchkit snapshot download signet
+# Ensure you have a signet node accepting connections on 127.0.0.1:39333
+benchkit run --out-dir ./out
+```
+
+Modify `benchmark.yml` to benchmark your desired commits and parameters.
 
 ## Installation
 
@@ -48,7 +66,7 @@ export RUST_LOG=info
 ### Building Bitcoin Core
 
 ```bash
-# Build bitcoind binaries for specified commits
+# Build bitcoind binaries from config commits
 benchkit build
 ```
 

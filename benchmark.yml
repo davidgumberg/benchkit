@@ -32,8 +32,8 @@ global:
 
   # Path to source code (required).
   # Can point to a local or online fork of bitcoin/bitcoin.
-  source: $HOME/src/core/bitcoin
-  # source: https://github.com/bitcoin/bitcoin
+  # source: $HOME/src/core/bitcoin
+  source: https://github.com/bitcoin/bitcoin
  
   # The directory binaries will be built into
   scratch: $HOME/.local/state/benchkit/scratch
