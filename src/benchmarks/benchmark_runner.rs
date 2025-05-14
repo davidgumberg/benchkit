@@ -213,6 +213,19 @@ impl BenchmarkRunner {
         runs: usize,
         hook_args: &HookArgs,
     ) -> Result<BenchmarkResult> {
+        // Use the variant with empty parameters
+        let empty_params = HashMap::new();
+        self.run_benchmark_with_params(command, runs, hook_args, &empty_params)
+    }
+
+    /// Run a benchmark command with the specified number of runs and parameter values
+    pub fn run_benchmark_with_params(
+        &self,
+        command: &str,
+        runs: usize,
+        hook_args: &HookArgs,
+        params: &HashMap<String, String>,
+    ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
         info!(
             "Running benchmark: {} for {} runs (commit: {})",
@@ -225,9 +238,11 @@ impl BenchmarkRunner {
         let mut results = Vec::with_capacity(runs);
 
         for i in 0..runs {
-            // Create iteration-specific hook args
+            // Create iteration-specific hook args with parameter directory
+            let params_dir = Self::params_to_dirname(params);
             let iter_args = HookArgs {
                 iteration: i,
+                params_dir: params_dir.clone(),
                 ..hook_args.clone()
             };
 
@@ -238,7 +253,7 @@ impl BenchmarkRunner {
             let start = Instant::now();
 
             // Execute command with profiling if enabled
-            let (output, profile_result) = self.execute_command(command, i, commit)?;
+            let (output, profile_result) = self.execute_command(command, i, commit, params)?;
 
             // Stop timing (if we're not profiling, otherwise the profiler takes care of timing)
             let duration = start.elapsed();
@@ -278,7 +293,7 @@ impl BenchmarkRunner {
         // Create the benchmark result
         let benchmark_result = BenchmarkResult {
             command: command.to_string(),
-            parameters: HashMap::new(), // To be filled from config
+            parameters: params.clone(), // Copy the parameters into the result
             runs: results,
             summary,
         };
@@ -347,19 +362,45 @@ impl BenchmarkRunner {
         Ok(child)
     }
 
+    /// Generate a directory name from parameters
+    fn params_to_dirname(params: &HashMap<String, String>) -> String {
+        // Filter out commit parameter as it's already part of the directory structure
+        let filtered_params: Vec<(&String, &String)> =
+            params.iter().filter(|(k, _)| *k != "commit").collect();
+
+        if filtered_params.is_empty() {
+            return "default".to_string();
+        }
+
+        // Sort params by key for consistent ordering
+        let mut param_strs: Vec<String> = filtered_params
+            .iter()
+            .map(|(k, v)| format!("{}-{}", k, v))
+            .collect();
+        param_strs.sort();
+
+        param_strs.join("_")
+    }
+
     /// Execute a command and capture its output, optionally with profiling
     fn execute_command(
         &self,
         command: &str,
         iteration: usize,
         commit: &str,
+        params: &HashMap<String, String>,
     ) -> Result<(Output, Option<ProfileResult>)> {
         debug!("Executing command: {}", command);
 
         // If profiling is enabled, use the profiler to execute the command
         if self.enable_profiling {
-            // Create a directory structure with commit/iteration
-            let profile_out_dir = self.out_dir.join(commit).join(iteration.to_string());
+            // Create a directory structure with commit/params/iteration
+            let params_dir = Self::params_to_dirname(params);
+            let profile_out_dir = self
+                .out_dir
+                .join(commit)
+                .join(params_dir)
+                .join(iteration.to_string());
             std::fs::create_dir_all(&profile_out_dir)?;
 
             // Create the profiler with our benchmark cores
@@ -487,8 +528,10 @@ impl BenchmarkRunner {
                 current_hook_args.commit = commit.clone();
             }
 
-            let mut result = self.run_benchmark(&command, runs, &current_hook_args)?;
-            result.parameters = params;
+            // Create a modified copy of run_benchmark that uses the params for directory structure
+            let mut result =
+                self.run_benchmark_with_params(&command, runs, &current_hook_args, &params)?;
+            result.parameters = params.clone();
             results.push(result);
         }
 

@@ -2,32 +2,15 @@
 set -e
 echo "Running setup.sh"
 
-# Process named arguments
+# Process only needed parameters
 while [ $# -gt 0 ]; do
   case "$1" in
-    --binary=*)
-      BINARY="${1#*=}"
-      ;;
-    --connect=*)
-      CONNECT_ADDRESS="${1#*=}"
-      ;;
-    --network=*)
-      NETWORK="${1#*=}"
-      ;;
-    --out-dir=*)
-      OUT_DIR="${1#*=}"
-      ;;
-    --snapshot=*)
-      SNAPSHOT_PATH="${1#*=}"
-      ;;
     --datadir=*)
       TMP_DATADIR="${1#*=}"
       ;;
-    --iteration=*)
-      ITERATION="${1#*=}"
-      ;;
-    --commit=*)
-      COMMIT="${1#*=}"
+    # Accept but ignore other parameters
+    --binary=* | --connect=* | --network=* | --out-dir=* | --snapshot=* | --iteration=* | --commit=* | --params-dir=*)
+      # Just skip these parameters silently
       ;;
     *)
       echo "Unknown parameter: $1"

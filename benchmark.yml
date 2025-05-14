@@ -60,7 +60,7 @@ benchmarks:
       # The correct binary for the [commit] will be substituted and the
       # (bitcoin) [network] applied automatically. {dbcache} is an explicit
       # (additional) parameterisation from [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} -stopatheight=180000"
+      command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
       profile_interval: 1
       warmup: 0
       runs: 2
@@ -72,3 +72,4 @@ benchmarks:
         - var: dbcache
           # A list of values to substitute in.
           values: ["450", "32000"]
+

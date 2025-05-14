@@ -202,6 +202,7 @@ This can be downloaded with `benchkit snapshot download {}`",
             tmp_data_dir: self.global_config.bench.global.tmp_data_dir.clone(),
             iteration: 0,
             commit: "{commit}".to_string(), // Will be replaced by parameter substitution
+            params_dir: "default".to_string(), // Will be updated during parameter matrix expansion
         };
 
         let results =

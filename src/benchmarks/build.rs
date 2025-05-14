@@ -321,13 +321,10 @@ impl Builder {
 
         // Run cmake configuration
         let mut cmd = Command::new("cmake");
-        cmd.current_dir(source_dir)
-            .arg("-B")
-            .arg(&canonical_dir);
+        cmd.current_dir(source_dir).arg("-B").arg(&canonical_dir);
 
         // Add default build flags
-        cmd.arg("-DBUILD_CLI=OFF")
-            .arg("-DBUILD_TESTS=OFF");
+        cmd.arg("-DBUILD_CLI=OFF").arg("-DBUILD_TESTS=OFF");
 
         // Add custom build flags if configured
         if let Some(cmake_args) = &self.config.bench.global.cmake_build_args {

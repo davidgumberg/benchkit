@@ -43,6 +43,8 @@ pub struct HookArgs {
     pub iteration: usize,
     /// Commit being benchmarked
     pub commit: String,
+    /// Parameter string for directory organization (always present, "default" if no params)
+    pub params_dir: String,
 }
 
 /// HookRunner manages the lifecycle scripts for benchmarks
@@ -87,6 +89,9 @@ impl HookRunner {
             .arg(format!("--datadir={}", args.tmp_data_dir.display()))
             .arg(format!("--iteration={}", args.iteration))
             .arg(format!("--commit={}", args.commit));
+
+        // Always add params directory
+        cmd.arg(format!("--params-dir={}", args.params_dir));
 
         // Run the command
         let status = cmd.status().context(format!(

@@ -2,23 +2,14 @@
 set -e
 echo "Running conclude.sh"
 
-# Process named arguments
+# Process only needed parameters
 while [ $# -gt 0 ]; do
   case "$1" in
-    --binary=*)
-      BINARY="${1#*=}"
-      ;;
-    --connect=*)
-      CONNECT_ADDRESS="${1#*=}"
-      ;;
     --network=*)
       NETWORK="${1#*=}"
       ;;
     --out-dir=*)
       OUT_DIR="${1#*=}"
-      ;;
-    --snapshot=*)
-      SNAPSHOT_PATH="${1#*=}"
       ;;
     --datadir=*)
       TMP_DATADIR="${1#*=}"
@@ -29,6 +20,13 @@ while [ $# -gt 0 ]; do
     --commit=*)
       COMMIT="${1#*=}"
       ;;
+    --params-dir=*)
+      PARAMS_DIR="${1#*=}"
+      ;;
+    # Accept but ignore other parameters
+    --binary=* | --connect=* | --snapshot=*)
+      # Just skip these parameters silently
+      ;;
     *)
       echo "Unknown parameter: $1"
       exit 1
@@ -38,13 +36,15 @@ while [ $# -gt 0 ]; do
 done
 
 # Move datadir files to the outdir in a structured way
-echo "Moving debug.log to $OUT_DIR/$COMMIT/$ITERATION/"
-mkdir -p "$OUT_DIR"/"$COMMIT"/"$ITERATION"
-# Store debug.log in commit/iteration directory
+# Use the directory structure: commit -> params -> iteration
+echo "Moving debug.log to $OUT_DIR/$COMMIT/$PARAMS_DIR/$ITERATION/"
+mkdir -p "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"
+
+# Store debug.log in commit/params/iteration directory
 if [ "$NETWORK" = "mainnet" ]; then
-    mv "$TMP_DATADIR"/debug.log "$OUT_DIR"/"$COMMIT"/"$ITERATION"/debug.log
+    mv "$TMP_DATADIR"/debug.log "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"/debug.log
 else
-    mv "$TMP_DATADIR/$NETWORK/debug.log" "$OUT_DIR"/"$COMMIT"/"$ITERATION"/debug.log
+    mv "$TMP_DATADIR/$NETWORK/debug.log" "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"/debug.log
 fi
 
 echo "Cleaning datadir contents from ${TMP_DATADIR}"
