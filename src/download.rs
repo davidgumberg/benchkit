@@ -18,8 +18,8 @@ pub struct SnapshotInfo {
 impl SnapshotInfo {
     pub fn for_network(network: &Network) -> Option<Self> {
         match network {
-            Network::Mainnet => Some(Self {
-                network: Network::Mainnet,
+            Network::Main => Some(Self {
+                network: Network::Main,
                 filename: "mainnet-880000.dat",
                 height: 880000,
             }),

@@ -50,7 +50,7 @@ benchmarks:
   - name: "assumeutxo signet test sync"
 
     # Bitcoin network to run on (main, test, testnet4, signet, regtest)
-    network: signet
+    network: main
 
     # An optional address for bitcoind to -connect to for sync
     connect: 127.0.0.1:39333
