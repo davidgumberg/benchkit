@@ -5,7 +5,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use log::info;
 use reqwest::blocking::Client;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -60,9 +60,20 @@ pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> Result<()> {
     );
 
     let mut file = File::create(&filepath)?;
-    let content = response.bytes()?;
-    file.write_all(&content)?;
-    pb.set_position(content.len() as u64);
+    let mut downloaded = 0u64;
+    let mut stream = response;
+
+    // Stream the download in chunks
+    let mut buffer = [0; 8192];
+    loop {
+        let bytes_read = stream.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..bytes_read])?;
+        downloaded += bytes_read as u64;
+        pb.set_position(downloaded);
+    }
 
     pb.finish();
     info!("Successfully downloaded {filepath:?}");
