@@ -154,6 +154,7 @@ impl HookRunner {
         let context = CommandContext {
             command_name: Some(format!("{:?} script", stage)),
             allow_failure: false,
+            capture_output: true,
             ..CommandContext::default()
         };
         let executor = CommandExecutor::with_context(context);
