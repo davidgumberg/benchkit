@@ -10,16 +10,11 @@ use benchkit::{
 
 use clap::{Parser, Subcommand};
 use env_logger::Env;
-// use futures::StreamExt;
 use log::{info, warn};
-// use object_store::aws::{AmazonS3, AmazonS3Builder};
-// use object_store::ObjectStore;
 use std::{path::PathBuf, process};
 
 const DEFAULT_CONFIG: &str = "config.yml";
 const DEFAULT_BENCH_CONFIG: &str = "benchmark.yml";
-// const BUCKET: &str = "benchcoin";
-// const OBJECT_URL: &str = "https://hel1.your-objectstorage.com";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -68,7 +63,6 @@ enum Commands {
         #[command(subcommand)]
         command: SystemCommands,
     },
-    S3,
     /// Check patches apply cleanly
     Patch {
         #[command(subcommand)]
@@ -166,43 +160,11 @@ fn main() -> Result<()> {
                 builder.update_patches(true)?;
             }
         },
-        // Commands::S3 {} => {
-        //     // Create an S3 store pointing to Hetzner
-        //     let key_id = std::env::var("KEY_ID").unwrap();
-        //     let secret_key = std::env::var("SECRET_ACCESS_KEY").unwrap();
-        //     info!("Using:");
-        //     info!("  url: {OBJECT_URL}");
-        //     info!("  bucket: {BUCKET}");
-        //     info!("  key_id: {key_id}");
-        //     // info!("  secret_key: {secret_key}");
-        //     let store = AmazonS3Builder::new()
-        //         .with_bucket_name(BUCKET)
-        //         .with_access_key_id(key_id)
-        //         .with_secret_access_key(secret_key)
-        //         .with_endpoint(OBJECT_URL)
-        //         .build()?;
-        //     list_files(&store).await?;
-        // }
         _ => {}
     }
 
     Ok(())
 }
-
-// async fn list_files(store: &AmazonS3) -> anyhow::Result<()> {
-//     let mut list_stream = store.list(None);
-//
-//     while let Some(meta) = list_stream.next().await {
-//         match meta {
-//             Ok(meta) => {
-//                 info!("Name: {}, Size: {} bytes", meta.location, meta.size);
-//             }
-//             Err(e) => error!("Error listing object: {}", e),
-//         }
-//     }
-//
-//     Ok(())
-// }
 
 fn generate_id(pr: bool) -> i64 {
     use rand::Rng;
