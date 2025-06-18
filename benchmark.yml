@@ -3,8 +3,14 @@
 global:
 
   # Global benchmark option defaults.
-  # "benchmark" and "script" values will be overwritten by local options
-  # specified per-benchmark.
+  #
+  # "benchmark" and "scripts" values will be overwritten by local options
+  # specified in
+  #
+  #   benchmarks:
+  #     <options>
+  #     benchmark:
+  #       <options>
   benchmark:
     warmup: 1
     runs: 5
@@ -59,8 +65,10 @@ benchmarks:
     # These override global benchmark options in case of conflict.
     benchmark:
       # The correct binary for the [commit] will be substituted and the
-      # (bitcoin) [network] applied automatically. {dbcache} is an explicit
-      # (additional) parameterisation from [parameter_lists] below.
+      # (bitcoin) [network] applied automatically.
+      #
+      # {dbcache} here is an explicit (additional) parameterisation from
+      # [parameter_lists] below.
       command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
       profile_interval: 1
       warmup: 0
