@@ -41,7 +41,7 @@ echo "Moving debug.log to $OUT_DIR/$COMMIT/$PARAMS_DIR/$ITERATION/"
 mkdir -p "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"
 
 # Store debug.log in commit/params/iteration directory
-if [ "$NETWORK" = "mainnet" ]; then
+if [ "$NETWORK" = "main" ]; then
     mv "$TMP_DATADIR"/debug.log "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"/debug.log
 else
     mv "$TMP_DATADIR/$NETWORK/debug.log" "$OUT_DIR"/"$COMMIT"/"$PARAMS_DIR"/"$ITERATION"/debug.log
