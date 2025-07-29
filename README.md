@@ -29,11 +29,18 @@ If not using Nix package manager and project flake:
 
 ```bash
 git clone https://github.com/bitcoin-dev-tools/benchkit.git && cd benchkit
-cargo install --path .
 
-benchkit snapshot download signet
-# Ensure you have a signet node accepting connections on 127.0.0.1:39333
-benchkit run --out-dir ./out
+# Optional (Recommended)
+nix develop
+
+# Download a signet assumeutxo snapshot
+cargo run -- snapshot download signet
+
+# Ensure you have a signet node accepting connections on 127.0.0.1:39333 e.g.:
+# `bitcoind -signet -port=39333 -rpcport=39332 -daemon=1`
+
+# Run demo benchmarks
+cargo run -- run --out-dir ./out
 ```
 
 Modify `benchmark.yml` to benchmark your desired commits and parameters.
@@ -42,6 +49,8 @@ Modify `benchmark.yml` to benchmark your desired commits and parameters.
 
 ```bash
 cargo install --path .
+
+# Now call the binary using "benchkit <options>"
 ```
 
 ## Environment Configuration
@@ -53,10 +62,6 @@ modify it. Otherwise, ensure these variables are set in your environment.
 Key environment variables:
 
 ```bash
-# Object Storage (optional)
-export KEY_ID=<your_id>
-export SECRET_ACCESS_KEY=<your_password>
-
 # Logging
 export RUST_LOG=info
 ```
@@ -148,6 +153,23 @@ benchmarks:
       parameter_lists:
         - var: dbcache
           values: ["450", "32000"]
+
+  # Example using stop_on_log_pattern (regex)
+  - name: "stop on new block"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      command: "bitcoind -dbcache={dbcache}"
+      stop_on_log_pattern: "UpdateTip: new best="  # Stop when this regex matches
+      runs: 3
+      parameter_lists:
+        - var: dbcache
+          values: ["450"]
+
+  # More regex examples:
+  # stop_on_log_pattern: "UpdateTip: new best=.* height=200000"  # Stop at specific height
+  # stop_on_log_pattern: "progress=0\\.11[6-9]"  # Stop at progress threshold
+  # stop_on_log_pattern: "date='2024-04-18"  # Stop on specific date
 ```
 
 See [Internal Benchmarking](docs/INTERNAL_BENCHMARKING.md) for details on the new configuration format.
@@ -175,6 +197,8 @@ Benchkit supports runtime profiling of applications, measuring CPU usage,
 memory consumption, disk I/O, and other metrics over time. This is particularly
 useful for benchmarking Bitcoin Core operations to identify performance
 bottlenecks.
+
+Profiling is currently incompatible with `stop_at_log_line`.
 
 ### Enabling Profiling
 

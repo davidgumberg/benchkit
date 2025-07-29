@@ -82,6 +82,7 @@ benchmarks:
           # A list of values to substitute in.
           values: ["450", "32000"]
 
+  # Example using a full sync rather than assumeutxo
   # - name: "signet no assumeutxo"
   #   network: signet
   #   connect: 127.0.0.1:39333
@@ -89,7 +90,6 @@ benchmarks:
   #     # Use a custom prepare script which does not do assumeutxo syncing
   #     # for a full IBD benchmark to stopheight
   #     prepare: ./scripts/prepare-noassumeutxo.sh
-  #   benchmark:
   #     command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
   #     profile_interval: 1
   #     warmup: 0
@@ -97,3 +97,23 @@ benchmarks:
   #     parameter_lists:
   #       - var: dbcache
   #         values: ["32000"]
+
+  # Example using stop_on_log_pattern (regex) to stop when a new block is found
+  - name: "stop on new block"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      command: "bitcoind"
+      stop_on_log_pattern: ".*height=200000.*"
+      profile: false  # Profiling not compatible with stop_on_log_pattern
+      warmup: 0
+      runs: 1
+
+  # More advanced regex pattern examples:
+  # - name: "stop at specific height"
+  #   benchmark:
+  #     stop_on_log_pattern: "UpdateTip: new best=.* height=200000"
+  #
+  # - name: "stop at progress threshold"
+  #   benchmark:
+  #     stop_on_log_pattern: "progress=0\\.11[6-9]"  # 0.116 or higher

@@ -41,5 +41,8 @@ pub use benchmark_runner::BenchmarkRunner;
 mod runner;
 pub use runner::Runner;
 
+mod log_monitor;
+pub use log_monitor::{LogMonitor, LogMonitorBuilder};
+
 // mod object_storage;
 // pub use object_storage::ObjectStorage;

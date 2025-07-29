@@ -28,6 +28,8 @@ pub struct BenchmarkOptions {
     pub profile: Option<bool>,
     /// Sampling interval for profiling in seconds
     pub profile_interval: Option<u64>,
+    /// Optional regex pattern to stop the benchmark when matched in log output
+    pub stop_on_log_pattern: Option<String>,
 }
 
 fn default_warmup() -> usize {
@@ -54,6 +56,7 @@ impl BenchmarkOptions {
             parameter_lists: None,
             profile: None,
             profile_interval: None,
+            stop_on_log_pattern: None,
         }
     }
 
@@ -65,6 +68,20 @@ impl BenchmarkOptions {
                 anyhow::bail!("Profile interval cannot be zero");
             }
         }
+
+        // Validate stop_on_log_pattern if present
+        if let Some(pattern) = &self.stop_on_log_pattern {
+            if pattern.is_empty() {
+                anyhow::bail!("stop_on_log_pattern cannot be empty");
+            }
+            // Validate that it's a valid regex pattern
+            use regex::Regex;
+            match Regex::new(pattern) {
+                Ok(_) => {}
+                Err(e) => anyhow::bail!("Invalid regex pattern in stop_on_log_pattern: {}", e),
+            }
+        }
+
         Ok(())
     }
 

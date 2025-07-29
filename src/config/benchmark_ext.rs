@@ -19,6 +19,10 @@ impl Merge for BenchmarkOptions {
                 .or_else(|| self.parameter_lists.clone()),
             profile: other.profile.or(self.profile),
             profile_interval: other.profile_interval.or(self.profile_interval),
+            stop_on_log_pattern: other
+                .stop_on_log_pattern
+                .clone()
+                .or_else(|| self.stop_on_log_pattern.clone()),
         })
     }
 }
@@ -56,6 +60,10 @@ impl MergeFromMap<String, Value> for BenchmarkOptions {
 
         if let Some(profile_interval) = map.get("profile_interval").and_then(|v| v.as_u64()) {
             result.profile_interval = Some(profile_interval);
+        }
+
+        if let Some(stop_on_log_pattern) = map.get("stop_on_log_pattern").and_then(|v| v.as_str()) {
+            result.stop_on_log_pattern = Some(stop_on_log_pattern.to_string());
         }
 
         Ok(result)

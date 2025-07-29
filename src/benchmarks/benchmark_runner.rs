@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::collections::HashMap;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -7,6 +7,7 @@ use std::time::Instant;
 
 use crate::benchmarks::export::ResultExporter;
 use crate::benchmarks::hook_runner::{HookArgs, HookRunner, HookStage};
+use crate::benchmarks::log_monitor::LogMonitor;
 use crate::benchmarks::parameters::{ParameterList, ParameterMatrix, ParameterUtils};
 use crate::benchmarks::profiler::{ProfileResult, Profiler};
 use crate::benchmarks::results::{BenchmarkResult, ResultAnalyzer, RunResult};
@@ -31,6 +32,8 @@ pub struct BenchmarkRunner {
     profile_interval: u64,
     /// Cores to constrain benchmarks to
     benchmark_cores: Option<String>,
+    /// Optional regex pattern to stop the benchmark when matched
+    stop_on_log_pattern: Option<String>,
 }
 
 /// Builder for BenchmarkRunner
@@ -42,6 +45,7 @@ pub struct BenchmarkRunnerBuilder {
     out_dir: PathBuf,
     profile_interval: u64,
     benchmark_cores: Option<String>,
+    stop_on_log_pattern: Option<String>,
 }
 
 impl BenchmarkRunnerBuilder {
@@ -55,6 +59,7 @@ impl BenchmarkRunnerBuilder {
             out_dir,
             profile_interval: 5, // Default to 5 second interval
             benchmark_cores: None,
+            stop_on_log_pattern: None,
         }
     }
 
@@ -85,6 +90,12 @@ impl BenchmarkRunnerBuilder {
         self
     }
 
+    /// Set stop on log pattern (regex)
+    pub fn stop_on_log_pattern(mut self, pattern: Option<String>) -> Self {
+        self.stop_on_log_pattern = pattern;
+        self
+    }
+
     /// Build the BenchmarkRunner, validating parameters if needed
     pub fn build(self) -> Result<BenchmarkRunner> {
         // Validate configuration if needed
@@ -99,6 +110,7 @@ impl BenchmarkRunnerBuilder {
             out_dir: self.out_dir,
             profile_interval: self.profile_interval,
             benchmark_cores: self.benchmark_cores,
+            stop_on_log_pattern: self.stop_on_log_pattern,
         })
     }
 }
@@ -203,12 +215,20 @@ impl BenchmarkRunner {
     fn launch_command_with_affinity(&self, command: &str) -> Result<std::process::Child> {
         debug!("Launching command with affinity: {}", command);
 
+        // Determine if we need to capture output
+        // We capture output if:
+        // 1. capture_output is true (for storing in results)
+        // 2. stop_on_log_pattern is configured (for monitoring)
+        // 3. We're not profiling (profiling doesn't capture output)
+        let should_capture =
+            !self.enable_profiling && (self.capture_output || self.stop_on_log_pattern.is_some());
+
         // Create a command executor with our benchmark settings
         let executor = CommandExecutor::builder()
             .name(command.to_string())
             .cpu_cores(self.benchmark_cores.clone())
             .process_group(true)
-            .capture_output(!self.enable_profiling)
+            .capture_output(should_capture)
             .build()?;
 
         // Launch the command using the executor
@@ -223,7 +243,22 @@ impl BenchmarkRunner {
         commit: &str,
         params: &HashMap<String, String>,
     ) -> Result<(std::process::Output, Option<ProfileResult>)> {
-        debug!("Executing command: {}", command);
+        // Automatically append -printtoconsole if stop_on_log_pattern is configured
+        // and the command doesn't already contain it
+        let final_command = if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
+            let updated_command = format!("{} -printtoconsole", command);
+            debug!("Automatically added -printtoconsole for log pattern matching: {}", updated_command);
+            updated_command
+        } else {
+            command.to_string()
+        };
+
+        debug!("Executing command: {}", final_command);
+
+        // Check for conflicts between profiling and stop_on_log_pattern
+        if self.enable_profiling && self.stop_on_log_pattern.is_some() {
+            warn!("Both profiling and stop_on_log_pattern are configured. Profiling takes precedence, stop_on_log_pattern will be ignored for this run.");
+        }
 
         // If profiling is enabled, use the profiler to execute the command
         if self.enable_profiling {
@@ -243,9 +278,9 @@ impl BenchmarkRunner {
                 .build()?;
 
             // Launch the command using our helper, which handles CPU affinity
-            info!("Profiling command: {}", command);
-            let child = self.launch_command_with_affinity(command)?;
-            let profile_result = profiler.profile_process(command, child)?;
+            info!("Profiling command: {}", final_command);
+            let child = self.launch_command_with_affinity(&final_command)?;
+            let profile_result = profiler.profile_process(&final_command, child)?;
 
             // Make an Output manually for profile
             let output = std::process::Output {
@@ -257,8 +292,38 @@ impl BenchmarkRunner {
             return Ok((output, Some(profile_result)));
         }
 
-        // For non-profiled commands, launch and wait
-        let child = self.launch_command_with_affinity(command)?;
+        // For non-profiled commands, launch and potentially monitor
+        let mut child = self.launch_command_with_affinity(&final_command)?;
+
+        // If stop_on_log_pattern is configured, monitor the output
+        if let Some(pattern) = &self.stop_on_log_pattern {
+            info!("Monitoring command output for pattern: {}", pattern);
+
+            // Start monitoring the child process
+            let mut monitor = LogMonitor::start_monitoring(&mut child, pattern.clone())?;
+
+            // Wait for either pattern match or process exit
+            let pattern_matched = monitor
+                .wait_for_match_or_exit(&mut child, std::time::Duration::from_millis(100))?;
+
+            if pattern_matched {
+                // Pattern was matched, terminate the process gracefully
+                info!("Pattern matched, terminating process");
+
+                // Send SIGTERM to the process
+                match child.kill() {
+                    Ok(_) => debug!("Process terminated successfully"),
+                    Err(e) => warn!("Failed to terminate process: {}", e),
+                }
+
+                // Also try to terminate any child processes via process group
+                if let Some(pgid) = child.id().checked_neg() {
+                    unsafe {
+                        libc::kill(pgid as i32, libc::SIGTERM);
+                    }
+                }
+            }
+        }
 
         // Wait for the command to complete and collect output
         let output = child
