@@ -7,11 +7,9 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core.
 - Run single or multiple benchmarks defined in YAML configuration files
 - Support for parameterized benchmarks with multiple variable combinations
 - Configurable benchmark environment variables
-<!-- - Integration with CI/PR workflows via run ID tracking -->
 - CPU affinity control for more consistent benchmark results
 - System performance tuning and monitoring
 - Nix flake for integrated build and run shell environment
-<!-- - Object storage integration for benchmark artifacts -->
 - AssumeUTXO snapshot management
 
 ## Prerequisites
