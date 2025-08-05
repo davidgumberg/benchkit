@@ -7,7 +7,7 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core.
 - Run single or multiple benchmarks defined in YAML configuration files
 - Support for parameterized benchmarks with multiple variable combinations
 - Configurable benchmark environment variables
-- CPU affinity control for more consistent benchmark results
+- CPU affinity control for more consistent benchmark results (Linux only)
 - System performance tuning and monitoring
 - Nix flake for integrated build and run shell environment
 - AssumeUTXO snapshot management
@@ -21,7 +21,7 @@ If not using Nix package manager and project flake:
 
 - Bitcoin Core build deps, e.g. [build.md](https://github.com/bitcoin/bitcoin/blob/master/doc/build-unix.md)
 - Cargo/rustc
-- `hwloc` library (only if using CPU affinity control)
+- `hwloc` library (only if using CPU affinity control, Linux only)
 
 ## Quickstart
 

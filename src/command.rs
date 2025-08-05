@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
-use log::{debug, info, warn};
+#[cfg(target_os = "linux")]
+use log::warn;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 
+#[cfg(target_os = "linux")]
 use crate::cpu_binding::CpuBinder;
 
 /// Command execution context
@@ -137,9 +140,21 @@ impl CommandExecutor {
 
     /// Bind the current process to specified CPU cores
     pub fn bind_current_process_to_cores(cores: &str) -> Result<()> {
-        let mut cpu_binder = CpuBinder::new()?;
-        info!("Binding current process to cores: {}", cores);
-        cpu_binder.bind_current_process_to_cores(cores)?;
+        #[cfg(target_os = "linux")]
+        {
+            let mut cpu_binder = CpuBinder::new()?;
+            info!("Binding current process to cores: {}", cores);
+            cpu_binder.bind_current_process_to_cores(cores)?;
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            info!(
+                "CPU binding is not supported on this platform, skipping (cores: {})",
+                cores
+            );
+        }
+
         Ok(())
     }
 
@@ -228,31 +243,43 @@ impl CommandExecutor {
 
     /// Apply CPU affinity to a process
     fn apply_cpu_affinity(&self, child: &Child, cores: &str) -> Result<()> {
-        let pid = child.id() as libc::pid_t;
-        debug!("Binding process with PID {} to cores: {}", pid, cores);
+        #[cfg(target_os = "linux")]
+        {
+            let pid = child.id() as libc::pid_t;
+            debug!("Binding process with PID {} to cores: {}", pid, cores);
 
-        // Create a new CPU binder for this operation
-        let mut cpu_binder = CpuBinder::new()?;
+            // Create a new CPU binder for this operation
+            let mut cpu_binder = CpuBinder::new()?;
 
-        // First bind the individual process to the specified cores
-        cpu_binder.bind_pid_to_cores(pid, cores)?;
+            // First bind the individual process to the specified cores
+            cpu_binder.bind_pid_to_cores(pid, cores)?;
 
-        // If we created a process group, try to bind the whole group too
-        if self.context.process_group {
-            let pgid = -pid; // Negative PID means process group in Linux scheduling APIs
+            // If we created a process group, try to bind the whole group too
+            if self.context.process_group {
+                let pgid = -pid; // Negative PID means process group in Linux scheduling APIs
 
-            // Use a separate block to capture any errors but continue execution
-            match cpu_binder.bind_pid_to_cores(pgid, cores) {
-                Ok(_) => debug!(
-                    "Successfully bound process group {} to cores {}",
-                    pid, cores
-                ),
-                Err(err) => {
-                    // Log the error but continue - individual process binding is already done
-                    warn!("Process group binding failed (non-critical): {}", err);
-                    debug!("Individual process binding was successful and should be inherited by children");
+                // Use a separate block to capture any errors but continue execution
+                match cpu_binder.bind_pid_to_cores(pgid, cores) {
+                    Ok(_) => debug!(
+                        "Successfully bound process group {} to cores {}",
+                        pid, cores
+                    ),
+                    Err(err) => {
+                        // Log the error but continue - individual process binding is already done
+                        warn!("Process group binding failed (non-critical): {}", err);
+                        debug!("Individual process binding was successful and should be inherited by children");
+                    }
                 }
             }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = child; // Suppress unused variable warning
+            debug!(
+                "CPU binding is not supported on this platform, skipping (cores: {})",
+                cores
+            );
         }
 
         Ok(())

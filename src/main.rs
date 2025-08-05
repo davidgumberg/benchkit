@@ -104,6 +104,9 @@ fn main() -> Result<()> {
 
     // Run system commands without loading any configuration
     if let Commands::System { command } = &cli.command {
+        if std::env::consts::OS != "linux" {
+            anyhow::bail!("System commands are only supported on Linux platforms");
+        }
         let checker = SystemChecker::new()?;
         match command {
             SystemCommands::Check => checker.run_checks()?,

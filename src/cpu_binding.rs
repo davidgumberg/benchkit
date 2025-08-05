@@ -117,54 +117,64 @@ impl CpuBinder {
 
         if pid < 0 {
             // This is a process group ID (negative PID means process group in Linux)
-            let pgid = -pid; // Convert back to positive number for display
-            info!(
-                "Binding process group with PGID {} to cores: {}",
-                pgid, cores_spec
-            );
+            #[cfg(target_os = "linux")]
+            {
+                let pgid = -pid; // Convert back to positive number for display
+                info!(
+                    "Binding process group with PGID {} to cores: {}",
+                    pgid, cores_spec
+                );
 
-            // We can't get the current binding for a process group, so we skip the "before" debug
+                // We can't get the current binding for a process group, so we skip the "before" debug
 
-            // For process groups, we need to use a raw syscall as hwloc doesn't support it directly
-            // In Linux, -pid in sched_setaffinity() refers to all processes in process group |pid|
+                // For process groups, we need to use a raw syscall as hwloc doesn't support it directly
+                // In Linux, -pid in sched_setaffinity() refers to all processes in process group |pid|
 
-            // Create a libc CPU set from our hwloc CpuSet
-            let mut cpu_set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
+                // Create a libc CPU set from our hwloc CpuSet
+                let mut cpu_set: libc::cpu_set_t = unsafe { std::mem::zeroed() };
 
-            // Walk through our CpuSet and set bits in the libc cpu_set_t
-            for i in 0..1024 {
-                // Standard Linux supports up to 1024 CPUs
-                if cpuset.is_set(i as u32) {
-                    unsafe {
-                        libc::CPU_SET(i, &mut cpu_set);
+                // Walk through our CpuSet and set bits in the libc cpu_set_t
+                for i in 0..1024 {
+                    // Standard Linux supports up to 1024 CPUs
+                    if cpuset.is_set(i as u32) {
+                        unsafe {
+                            libc::CPU_SET(i, &mut cpu_set);
+                        }
                     }
                 }
+
+                // Safety: sched_setaffinity is a Linux system call that sets the CPU affinity
+                // The first arg is the process ID to set affinity for (negative = process group)
+                let result = unsafe {
+                    libc::sched_setaffinity(
+                        pid,
+                        std::mem::size_of::<libc::cpu_set_t>() as libc::size_t,
+                        &cpu_set as *const libc::cpu_set_t,
+                    )
+                };
+
+                if result != 0 {
+                    let err = std::io::Error::last_os_error();
+                    return Err(anyhow::anyhow!(
+                        "Failed to bind process group to cores: {:?} (code: {}, raw pgid: {})",
+                        err,
+                        err.raw_os_error().unwrap_or(-1),
+                        pid
+                    ));
+                }
+
+                info!(
+                    "Successfully bound process group PGID {} to cores: {}",
+                    pgid, cores_spec
+                );
             }
 
-            // Safety: sched_setaffinity is a Linux system call that sets the CPU affinity
-            // The first arg is the process ID to set affinity for (negative = process group)
-            let result = unsafe {
-                libc::sched_setaffinity(
-                    pid,
-                    std::mem::size_of::<libc::cpu_set_t>() as libc::size_t,
-                    &cpu_set as *const libc::cpu_set_t,
-                )
-            };
-
-            if result != 0 {
-                let err = std::io::Error::last_os_error();
+            #[cfg(not(target_os = "linux"))]
+            {
                 return Err(anyhow::anyhow!(
-                    "Failed to bind process group to cores: {:?} (code: {}, raw pgid: {})",
-                    err,
-                    err.raw_os_error().unwrap_or(-1),
-                    pid
+                    "Process group CPU binding is only supported on Linux"
                 ));
             }
-
-            info!(
-                "Successfully bound process group PGID {} to cores: {}",
-                pgid, cores_spec
-            );
         } else {
             // This is a regular process ID
             info!("Binding process with PID {} to cores: {}", pid, cores_spec);

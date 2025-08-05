@@ -245,13 +245,17 @@ impl BenchmarkRunner {
     ) -> Result<(std::process::Output, Option<ProfileResult>)> {
         // Automatically append -printtoconsole if stop_on_log_pattern is configured
         // and the command doesn't already contain it
-        let final_command = if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
-            let updated_command = format!("{} -printtoconsole", command);
-            debug!("Automatically added -printtoconsole for log pattern matching: {}", updated_command);
-            updated_command
-        } else {
-            command.to_string()
-        };
+        let final_command =
+            if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
+                let updated_command = format!("{} -printtoconsole", command);
+                debug!(
+                    "Automatically added -printtoconsole for log pattern matching: {}",
+                    updated_command
+                );
+                updated_command
+            } else {
+                command.to_string()
+            };
 
         debug!("Executing command: {}", final_command);
 
