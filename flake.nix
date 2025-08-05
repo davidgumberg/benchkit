@@ -26,6 +26,14 @@
       in
         with pkgs; {
           formatter = alejandra;
+
+          packages.default = callPackage ./. {
+            rustPlatform = makeRustPlatform {
+              cargo = rust-bin.stable.latest.default;
+              rustc = rust-bin.stable.latest.default;
+            };
+          };
+
           devShells.default = mkShell {
             stdenv = gcc14Stdenv;
             nativeBuildInputs = [
