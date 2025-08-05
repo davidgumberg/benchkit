@@ -315,6 +315,8 @@ impl Builder {
             if check_only {
                 cmd.arg("apply")
                     .arg("--check")
+                    .arg("--verbose")
+                    .arg("--3way")
                     .arg(patch_path.display().to_string());
             } else {
                 cmd.arg("-c")
@@ -322,6 +324,7 @@ impl Builder {
                     .arg("-c")
                     .arg("user.email=temp@temp.com")
                     .arg("am")
+                    .arg("--3way")
                     .arg("--no-signoff")
                     .arg(patch_path.display().to_string());
             }
