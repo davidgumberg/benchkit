@@ -11,8 +11,18 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::io::Write;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use tempfile::tempdir;
+
+    // Helper function to assert paths are equal after canonicalization
+    // This handles cases where paths may contain symlinks (e.g., /tmp -> /private/tmp on macOS)
+    fn assert_canonical_path_eq(actual: &Path, expected: &Path) {
+        let expected_canonical = expected.canonicalize()
+            .unwrap_or_else(|e| panic!("Failed to canonicalize expected path {:?}: {}", expected, e));
+        assert_eq!(actual, expected_canonical, 
+            "Path mismatch: actual {:?} != expected {:?} (canonical: {:?})", 
+            actual, expected, expected_canonical);
+    }
 
     #[test]
     fn test_is_valid_cpu_cores() {
@@ -77,6 +87,7 @@ mod tests {
             parameter_lists: None,
             profile: Some(false),
             profile_interval: Some(5),
+            stop_on_log_pattern: None,
         };
 
         // Override map
@@ -162,9 +173,9 @@ mod tests {
         assert!(expanded.tmp_data_dir.is_absolute());
 
         // Check that paths point to the correct location
-        assert_eq!(expanded.source, config_dir.join("source"));
-        assert_eq!(expanded.scratch, config_dir.join("scratch"));
-        assert_eq!(expanded.tmp_data_dir, config_dir.join("tmp"));
+        assert_canonical_path_eq(&expanded.source, &config_dir.join("source"));
+        assert_canonical_path_eq(&expanded.scratch, &config_dir.join("scratch"));
+        assert_canonical_path_eq(&expanded.tmp_data_dir, &config_dir.join("tmp"));
     }
 
     #[test]
@@ -183,14 +194,20 @@ mod tests {
         let mut file = fs::File::create(&config_path).unwrap();
         file.write_all(config_content.as_bytes()).unwrap();
 
+        // Create the directories before loading (required for canonicalization)
+        fs::create_dir_all(tempdir.path().join("bin")).unwrap();
+        fs::create_dir_all(tempdir.path().join("home")).unwrap();
+        fs::create_dir_all(tempdir.path().join("patches")).unwrap();
+        fs::create_dir_all(tempdir.path().join("snapshots")).unwrap();
+
         // Load the config
         let config = crate::config::app::load_app_config(&config_path).unwrap();
 
-        // Check values
-        assert_eq!(config.bin_dir, tempdir.path().join("bin"));
-        assert_eq!(config.home_dir, tempdir.path().join("home"));
-        assert_eq!(config.patch_dir, tempdir.path().join("patches"));
-        assert_eq!(config.snapshot_dir, tempdir.path().join("snapshots"));
+        // Check values using our helper
+        assert_canonical_path_eq(&config.bin_dir, &tempdir.path().join("bin"));
+        assert_canonical_path_eq(&config.home_dir, &tempdir.path().join("home"));
+        assert_canonical_path_eq(&config.patch_dir, &tempdir.path().join("patches"));
+        assert_canonical_path_eq(&config.snapshot_dir, &tempdir.path().join("snapshots"));
         assert_eq!(config.path, config_path);
 
         // Check trait implementations
@@ -233,9 +250,10 @@ mod tests {
         // Check values
         assert_eq!(config.run_id, 12345);
         assert_eq!(config.path, config_path);
-        assert_eq!(config.global.source, tempdir.path().join("source"));
-        assert_eq!(config.global.scratch, tempdir.path().join("scratch"));
-        assert_eq!(config.global.tmp_data_dir, tempdir.path().join("tmp"));
+        // Check paths using our helper
+        assert_canonical_path_eq(&config.global.source, &tempdir.path().join("source"));
+        assert_canonical_path_eq(&config.global.scratch, &tempdir.path().join("scratch"));
+        assert_canonical_path_eq(&config.global.tmp_data_dir, &tempdir.path().join("tmp"));
         assert_eq!(config.global.commits, vec!["abcdef123456"]);
 
         assert_eq!(config.benchmarks.len(), 1);
