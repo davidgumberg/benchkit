@@ -33,6 +33,7 @@
               ccache
               cmake
               gcc14
+              git
               gnum4
               gnumake
               pkg-config
