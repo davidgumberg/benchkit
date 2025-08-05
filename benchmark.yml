@@ -45,7 +45,7 @@ global:
   scratch: $HOME/.local/state/benchkit/scratch
 
   # Commits to build binaries from (required).
-  commits: ["fa48be3ba44", "f9d8910539a"]
+  commits: ["af7402ccfa", "d1b583181d"]
 
   # A temporary datadir for Bitcoin Core to use
   tmp_data_dir: /tmp/benchkit
@@ -99,15 +99,15 @@ benchmarks:
   #         values: ["32000"]
 
   # Example using stop_on_log_pattern (regex) to stop when a new block is found
-  - name: "stop on new block"
-    network: signet
-    connect: 127.0.0.1:39333
-    benchmark:
-      command: "bitcoind"
-      stop_on_log_pattern: ".*height=200000.*"
-      profile: false  # Profiling not compatible with stop_on_log_pattern
-      warmup: 0
-      runs: 1
+  # - name: "stop on new block"
+  #   network: signet
+  #   connect: 127.0.0.1:39333
+  #   benchmark:
+  #     command: "bitcoind"
+  #     stop_on_log_pattern: ".*height=200000.*"
+  #     profile: false  # Profiling not compatible with stop_on_log_pattern
+  #     warmup: 0
+  #     runs: 1
 
   # More advanced regex pattern examples:
   # - name: "stop at specific height"
