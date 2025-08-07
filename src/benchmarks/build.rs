@@ -71,7 +71,7 @@ impl Builder {
             }
             RepoSource::Remote(url) => {
                 // For remote repos, create a repository manager
-                info!("Using remote Git repository: {}", url);
+                info!("Using remote Git repository: {url}");
                 // Use the scratch directory directly to avoid duplicate "repos" in path
                 let scratch_dir = config.bench.global.scratch.clone();
                 // Important: pass the raw URL string, not the processed path
@@ -87,7 +87,7 @@ impl Builder {
     }
 
     fn binary_exists(&self, commit: &str) -> bool {
-        let binary_path = self.config.app.bin_dir.join(format!("bitcoind-{}", commit));
+        let binary_path = self.config.app.bin_dir.join(format!("bitcoind-{commit}"));
         binary_path.exists()
     }
 
@@ -118,13 +118,10 @@ impl Builder {
         // Build all commits up-front
         for commit in &self.config.bench.global.commits {
             if !self.binary_exists(commit) {
-                info!("Building binary for commit {}", commit);
+                info!("Building binary for commit {commit}");
                 self.build_commit(&source_dir, commit)?;
             } else {
-                info!(
-                    "Binary already exists for commit {}, skipping build",
-                    commit
-                );
+                info!("Binary already exists for commit {commit}, skipping build");
             };
         }
 
@@ -182,7 +179,7 @@ impl Builder {
     fn build_commit(&self, source_dir: &PathBuf, original_commit: &str) -> Result<()> {
         self.checkout_commit(source_dir, original_commit)?;
         let patched_commit = self.apply_patches(source_dir)?;
-        debug!("Commit hash after applying patches: {}", patched_commit);
+        debug!("Commit hash after applying patches: {patched_commit}");
         self.run_build(source_dir, original_commit)?;
         self.copy_binary(original_commit)?;
         Ok(())
@@ -218,7 +215,7 @@ impl Builder {
             .arg("checkout")
             .arg(commit)
             .status()
-            .with_context(|| format!("Failed to checkout commit {}", commit))?;
+            .with_context(|| format!("Failed to checkout commit {commit}"))?;
 
         if !status.success() {
             anyhow::bail!("Git checkout failed for commit {}", commit);
@@ -251,8 +248,7 @@ impl Builder {
     fn download_patch(&self, patch_name: &str, patches_dir: &PathBuf) -> Result<()> {
         let client = reqwest::blocking::Client::new();
         let url = format!(
-            "https://raw.githubusercontent.com/bitcoin-dev-tools/benchkit/master/patches/{}",
-            patch_name
+            "https://raw.githubusercontent.com/bitcoin-dev-tools/benchkit/master/patches/{patch_name}"
         );
         let response = client.get(&url).send()?;
 
@@ -273,7 +269,7 @@ impl Builder {
         }
 
         std::fs::write(&patch_path, content)?;
-        info!("Successfully downloaded patch: {}", patch_name);
+        info!("Successfully downloaded patch: {patch_name}");
         Ok(())
     }
 
@@ -331,7 +327,7 @@ impl Builder {
 
             let status = cmd.status().with_context(|| {
                 let action = if check_only { "test" } else { "apply" };
-                format!("Failed to {} patch {}", action, patch)
+                format!("Failed to {action} patch {patch}")
             })?;
 
             if !status.success() {
@@ -351,7 +347,7 @@ impl Builder {
             }
 
             let action = if check_only { "tested" } else { "applied" };
-            info!("Successfully {} patch: {}", action, patch);
+            info!("Successfully {action} patch: {patch}");
         }
         Ok(())
     }
@@ -363,9 +359,9 @@ impl Builder {
             .bench
             .global
             .scratch
-            .join(format!("build-{}", commit_hash));
+            .join(format!("build-{commit_hash}"));
 
-        info!("Making build dir: {:?}", dir);
+        info!("Making build dir: {dir:?}");
         path_utils::ensure_directory(&dir)?;
         let canonical_dir = dir.canonicalize()?;
 
@@ -380,7 +376,7 @@ impl Builder {
         }
         let config_status = cmd
             .status()
-            .with_context(|| format!("Failed to configure cmake for commit {}", commit_hash))?;
+            .with_context(|| format!("Failed to configure cmake for commit {commit_hash}"))?;
         if !config_status.success() {
             anyhow::bail!("CMake configuration failed for commit {}", commit_hash);
         }
@@ -408,14 +404,14 @@ impl Builder {
             .bench
             .global
             .scratch
-            .join(format!("build-{}", commit_hash));
+            .join(format!("build-{commit_hash}"));
 
         let src_path = dir.clone().join("bin/bitcoind");
         let dest_path = self
             .config
             .app
             .bin_dir
-            .join(format!("bitcoind-{}", commit_hash));
+            .join(format!("bitcoind-{commit_hash}"));
 
         if let Some(parent) = dest_path.parent() {
             path_utils::ensure_directory(parent)?;
@@ -425,10 +421,7 @@ impl Builder {
             .with_context(|| format!("Failed to copy binary for commit {commit_hash}"))?;
         // Clean up the build directory
         std::fs::remove_dir_all(dir.clone()).with_context(|| {
-            format!(
-                "Failed to cleanup extracted files for commit {} from {:?}",
-                commit_hash, dir
-            )
+            format!("Failed to cleanup extracted files for commit {commit_hash} from {dir:?}")
         })?;
 
         Ok(())
@@ -441,7 +434,7 @@ impl Builder {
             .arg("checkout")
             .arg(initial_ref)
             .status()
-            .with_context(|| format!("Failed to restore git state to {}", initial_ref))?;
+            .with_context(|| format!("Failed to restore git state to {initial_ref}"))?;
 
         if !status.success() {
             anyhow::bail!("Failed to restore git state");

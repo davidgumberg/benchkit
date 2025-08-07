@@ -42,7 +42,7 @@ pub fn download_snapshot(network: &Network, snapshot_dir: &Path) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("No snapshot available for network {:?}", network))?;
     let filename = snapshot_info.filename;
 
-    let url = format!("{}{}", SNAPSHOT_HOST, filename);
+    let url = format!("{SNAPSHOT_HOST}{filename}");
     let client = Client::new();
     let filepath = snapshot_dir.join(filename);
     info!("Downloading {url} to {filepath:?}");

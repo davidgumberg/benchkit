@@ -64,7 +64,7 @@ impl Runner {
                     .iter()
                     .enumerate()
                     .find(|(_, b)| b.name == n)
-                    .with_context(|| format!("Benchmark not found: {}", n))?;
+                    .with_context(|| format!("Benchmark not found: {n}"))?;
                 vec![bench]
             }
             None => self

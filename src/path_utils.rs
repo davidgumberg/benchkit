@@ -19,8 +19,8 @@ pub fn expand_path_buf(path: &Path) -> PathBuf {
 pub fn ensure_directory(path: &Path) -> Result<()> {
     if !path.exists() {
         std::fs::create_dir_all(path)
-            .with_context(|| format!("Failed to create directory: {:?}", path))?;
-        debug!("Created directory: {:?}", path);
+            .with_context(|| format!("Failed to create directory: {path:?}"))?;
+        debug!("Created directory: {path:?}");
     }
     Ok(())
 }
@@ -44,7 +44,7 @@ pub fn resolve_path(path: &Path, config_dir: &Path, create_dirs: bool) -> Result
     // Get the canonical path to resolve any symlinks or .. components
     let canonical = abs_path
         .canonicalize()
-        .with_context(|| format!("Failed to resolve path: {:?}", abs_path))?;
+        .with_context(|| format!("Failed to resolve path: {abs_path:?}"))?;
 
     Ok(canonical)
 }
@@ -80,8 +80,8 @@ pub fn prepare_output_directory(dir: &Path) -> Result<()> {
 /// Convenience function to copy a file with better error handling
 pub fn copy_file(source: &Path, dest: &Path) -> Result<()> {
     std::fs::copy(source, dest)
-        .with_context(|| format!("Failed to copy {:?} to {:?}", source, dest))?;
-    debug!("Copied {:?} to {:?}", source, dest);
+        .with_context(|| format!("Failed to copy {source:?} to {dest:?}"))?;
+    debug!("Copied {source:?} to {dest:?}");
     Ok(())
 }
 

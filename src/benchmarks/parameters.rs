@@ -60,7 +60,7 @@ impl ParameterMatrix {
         let mut command = command_template.to_string();
 
         for (var, value) in params {
-            let placeholder = format!("{{{}}}", var);
+            let placeholder = format!("{{{var}}}");
             command = command.replace(&placeholder, value);
         }
 
@@ -104,7 +104,7 @@ impl ParameterUtils {
         // Sort params for consistent ordering
         let mut param_strs: Vec<String> = filtered_params
             .iter()
-            .map(|(k, v)| format!("{}-{}", k, v))
+            .map(|(k, v)| format!("{k}-{v}"))
             .collect();
         param_strs.sort();
 

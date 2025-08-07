@@ -17,13 +17,12 @@ mod tests {
     // Helper function to assert paths are equal after canonicalization
     // This handles cases where paths may contain symlinks (e.g., /tmp -> /private/tmp on macOS)
     fn assert_canonical_path_eq(actual: &Path, expected: &Path) {
-        let expected_canonical = expected.canonicalize().unwrap_or_else(|e| {
-            panic!("Failed to canonicalize expected path {:?}: {}", expected, e)
-        });
+        let expected_canonical = expected
+            .canonicalize()
+            .unwrap_or_else(|e| panic!("Failed to canonicalize expected path {expected:?}: {e}"));
         assert_eq!(
             actual, expected_canonical,
-            "Path mismatch: actual {:?} != expected {:?} (canonical: {:?})",
-            actual, expected, expected_canonical
+            "Path mismatch: actual {actual:?} != expected {expected:?} (canonical: {expected_canonical:?})"
         );
     }
 

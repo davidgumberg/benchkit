@@ -302,12 +302,11 @@ pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<Ben
         .context("Failed to get benchmark config directory")?;
     let contents = std::fs::read_to_string(bench_config_path).with_context(|| {
         format!(
-            "Failed to read benchmark config file: {:?}",
-            bench_config_path
+            "Failed to read benchmark config file: {bench_config_path:?}"
         )
     })?;
     let mut config: BenchmarkConfig = serde_yaml::from_str(&contents)
-        .with_context(|| format!("Failed to parse YAML from file: {:?}", bench_config_path))?;
+        .with_context(|| format!("Failed to parse YAML from file: {bench_config_path:?}"))?;
     config.run_id = run_id;
     config.path = bench_config_path.to_path_buf();
     let global_config = config.global.with_expanded_paths(config_dir)?;

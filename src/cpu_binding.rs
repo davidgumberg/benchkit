@@ -81,7 +81,7 @@ impl CpuBinder {
                 // Handle single core like "5"
                 let core = part
                     .parse::<u32>()
-                    .with_context(|| format!("Invalid core number: {}", part))?;
+                    .with_context(|| format!("Invalid core number: {part}"))?;
                 cpuset.set(core);
             }
         }
@@ -104,7 +104,7 @@ impl CpuBinder {
 
         for (i, core) in all_cores.iter().enumerate() {
             if let Some(cpuset) = core.cpuset() {
-                result.push_str(&format!("Core {}: CPU IDs {:?}\n", i, cpuset));
+                result.push_str(&format!("Core {i}: CPU IDs {cpuset:?}\n"));
             }
         }
 
@@ -177,7 +177,7 @@ impl CpuBinder {
             }
         } else {
             // This is a regular process ID
-            info!("Binding process with PID {} to cores: {}", pid, cores_spec);
+            info!("Binding process with PID {pid} to cores: {cores_spec}");
             debug!(
                 "Before binding: {:?}",
                 self.topology

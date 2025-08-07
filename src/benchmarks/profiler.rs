@@ -121,7 +121,7 @@ impl Profiler {
         command: &str,
         mut child: std::process::Child,
     ) -> Result<ProfileResult> {
-        info!("Profiling process from command: {}", command);
+        info!("Profiling process from command: {command}");
         debug!("Will sample every {} seconds", self.sample_interval);
 
         let parent_pid = Pid::from_u32(child.id());
@@ -170,7 +170,7 @@ impl Profiler {
 
                 // Try to terminate gracefully first
                 if let Err(e) = child.kill() {
-                    warn!("Failed to kill stalled process: {}", e);
+                    warn!("Failed to kill stalled process: {e}");
                     // Try direct kill via system call as fallback
                     unsafe {
                         libc::kill(parent_pid.as_u32() as i32, libc::SIGTERM);
@@ -214,7 +214,7 @@ impl Profiler {
     /// Backward compatibility method that spawns a command and profiles it
     /// Use profile_process instead for more control over process launching
     pub fn profile_command(&mut self, command: &str) -> Result<ProfileResult> {
-        info!("Profiling command: {}", command);
+        info!("Profiling command: {command}");
         debug!("Will sample every {} seconds", self.sample_interval);
 
         // Spawning the command directly without CPU affinity

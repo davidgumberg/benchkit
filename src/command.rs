@@ -150,8 +150,7 @@ impl CommandExecutor {
         #[cfg(not(target_os = "linux"))]
         {
             info!(
-                "CPU binding is not supported on this platform, skipping (cores: {})",
-                cores
+                "CPU binding is not supported on this platform, skipping (cores: {cores})"
             );
         }
 
@@ -192,7 +191,7 @@ impl CommandExecutor {
     /// Execute a command and launch it, returning the child process handle
     pub fn launch_command(&self, cmd: &str, args: &[&str]) -> Result<Child> {
         let command_str = self.format_command(cmd, args);
-        debug!("Launching command: {}", command_str);
+        debug!("Launching command: {command_str}");
 
         let mut command = Command::new(cmd);
         command.args(args);
@@ -222,7 +221,7 @@ impl CommandExecutor {
         // Spawn the command
         let child = command
             .spawn()
-            .with_context(|| format!("Failed to spawn command: {}", command_str))?;
+            .with_context(|| format!("Failed to spawn command: {command_str}"))?;
 
         // Apply CPU affinity if specified
         if let Some(cores) = &self.context.cpu_cores {
@@ -277,8 +276,7 @@ impl CommandExecutor {
         {
             let _ = child; // Suppress unused variable warning
             debug!(
-                "CPU binding is not supported on this platform, skipping (cores: {})",
-                cores
+                "CPU binding is not supported on this platform, skipping (cores: {cores})"
             );
         }
 

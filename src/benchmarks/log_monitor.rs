@@ -21,7 +21,7 @@ pub struct LogMonitor {
 impl LogMonitor {
     /// Start monitoring a child process for a specific regex pattern
     pub fn start_monitoring(child: &mut Child, pattern: String) -> Result<Self> {
-        debug!("Starting log monitor for pattern: {}", pattern);
+        debug!("Starting log monitor for pattern: {pattern}");
 
         // Create and compile the regex pattern
         let regex = Regex::new(&pattern).context("Failed to compile regex pattern")?;
@@ -81,8 +81,7 @@ impl LogMonitor {
             match child.try_wait()? {
                 Some(status) => {
                     debug!(
-                        "Process exited with status {} before pattern match (after {} checks)",
-                        status, check_count
+                        "Process exited with status {status} before pattern match (after {check_count} checks)"
                     );
                     self.cleanup_threads();
                     return Ok(false);
@@ -99,7 +98,7 @@ impl LogMonitor {
 
                     // Log periodic status
                     if check_count % 100 == 0 {
-                        debug!("Still waiting for pattern match after {} checks, process still running", check_count);
+                        debug!("Still waiting for pattern match after {check_count} checks, process still running");
                     }
 
                     // Sleep before next check
@@ -114,7 +113,7 @@ impl LogMonitor {
         for handle in self.reader_threads.drain(..) {
             match handle.join() {
                 Ok(Ok(())) => {}
-                Ok(Err(e)) => debug!("Reader thread error: {}", e),
+                Ok(Err(e)) => debug!("Reader thread error: {e}"),
                 Err(_) => debug!("Reader thread panicked"),
             }
         }
@@ -136,7 +135,7 @@ fn monitor_stream_with_regex<R: std::io::Read + Send + 'static>(
 ) -> Result<()> {
     let reader = BufReader::new(stream);
 
-    debug!("Starting to monitor {} stream", stream_name);
+    debug!("Starting to monitor {stream_name} stream");
     let mut line_count = 0;
 
     for line_result in reader.lines() {
@@ -145,22 +144,21 @@ fn monitor_stream_with_regex<R: std::io::Read + Send + 'static>(
                 line_count += 1;
 
                 // Log every line to trace what we're receiving
-                trace!("{}:{} - {}", stream_name, line_count, line);
+                trace!("{stream_name}:{line_count} - {line}");
 
                 // Check if line matches the pattern using regex
                 if regex.is_match(&line) {
-                    info!("REGEX MATCH: line={}", line);
-                    info!("Pattern matched in {} line: {}", stream_name, line);
+                    info!("REGEX MATCH: line={line}");
+                    info!("Pattern matched in {stream_name} line: {line}");
                     matched.store(true, Ordering::SeqCst);
-                    trace!("Set matched flag to true in {} thread", stream_name);
+                    trace!("Set matched flag to true in {stream_name} thread");
                     break;
                 }
             }
             Err(e) => {
                 // EOF or other error, stop reading
                 debug!(
-                    "Error reading from {} after {} lines: {}",
-                    stream_name, line_count, e
+                    "Error reading from {stream_name} after {line_count} lines: {e}"
                 );
                 break;
             }
@@ -168,8 +166,7 @@ fn monitor_stream_with_regex<R: std::io::Read + Send + 'static>(
     }
 
     debug!(
-        "Finished monitoring {} stream after {} lines",
-        stream_name, line_count
+        "Finished monitoring {stream_name} stream after {line_count} lines"
     );
     Ok(())
 }

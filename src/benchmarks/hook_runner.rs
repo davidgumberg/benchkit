@@ -41,6 +41,12 @@ pub struct HookRunner {
     executor: Box<dyn HookExecutor>,
 }
 
+impl Default for HookRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HookRunner {
     /// Create a new HookRunner with native hooks
     pub fn new() -> Self {
@@ -51,7 +57,7 @@ impl HookRunner {
 
     /// Run a hook for the given stage
     pub fn run_hook(&self, stage: HookStage, args: &HookArgs) -> Result<()> {
-        info!("Running {:?} hook", stage);
+        info!("Running {stage:?} hook");
 
         match stage {
             HookStage::Setup => self.executor.setup(args),

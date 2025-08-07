@@ -246,7 +246,7 @@ impl RepositoryManager {
             .arg(url)
             .arg(target_path)
             .status()
-            .context(format!("Failed to clone repository: {}", url))?;
+            .context(format!("Failed to clone repository: {url}"))?;
 
         if !status.success() {
             anyhow::bail!("Git clone failed with status code: {}", status);
@@ -268,7 +268,7 @@ impl RepositoryManager {
             ))?;
 
         if !status.success() {
-            warn!("Git fetch failed with status code: {}", status);
+            warn!("Git fetch failed with status code: {status}");
             // Continue anyway, as the repository might still be usable
         }
 
@@ -296,7 +296,7 @@ impl RepositoryManager {
                 .arg("-t")
                 .arg(commit)
                 .output()
-                .context(format!("Failed to check commit: {}", commit))?;
+                .context(format!("Failed to check commit: {commit}"))?;
 
             if !output.status.success() {
                 anyhow::bail!("Commit not found in repository: {}", commit);

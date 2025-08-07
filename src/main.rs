@@ -121,7 +121,7 @@ fn main() -> Result<()> {
     // buckets.
     let run_id = cli.run_id.unwrap_or_else(|| {
         let id = generate_id(false);
-        warn!("No run_id specified. Generated random run_id: {}", id);
+        warn!("No run_id specified. Generated random run_id: {id}");
         id
     });
 

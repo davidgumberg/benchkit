@@ -143,8 +143,7 @@ impl BenchmarkRunner {
     ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
         info!(
-            "Running benchmark: {} for {} runs (commit: {})",
-            command, runs, commit
+            "Running benchmark: {command} for {runs} runs (commit: {commit})"
         );
 
         // Run the setup script once before all benchmark runs
@@ -213,7 +212,7 @@ impl BenchmarkRunner {
     /// Launch a command with CPU affinity constraints
     /// This is a helper function that can be used by both regular execution and profiling
     fn launch_command_with_affinity(&self, command: &str) -> Result<std::process::Child> {
-        debug!("Launching command with affinity: {}", command);
+        debug!("Launching command with affinity: {command}");
 
         // Determine if we need to capture output
         // We capture output if:
@@ -247,17 +246,16 @@ impl BenchmarkRunner {
         // and the command doesn't already contain it
         let final_command =
             if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
-                let updated_command = format!("{} -printtoconsole", command);
+                let updated_command = format!("{command} -printtoconsole");
                 debug!(
-                    "Automatically added -printtoconsole for log pattern matching: {}",
-                    updated_command
+                    "Automatically added -printtoconsole for log pattern matching: {updated_command}"
                 );
                 updated_command
             } else {
                 command.to_string()
             };
 
-        debug!("Executing command: {}", final_command);
+        debug!("Executing command: {final_command}");
 
         // Check for conflicts between profiling and stop_on_log_pattern
         if self.enable_profiling && self.stop_on_log_pattern.is_some() {
@@ -282,7 +280,7 @@ impl BenchmarkRunner {
                 .build()?;
 
             // Launch the command using our helper, which handles CPU affinity
-            info!("Profiling command: {}", final_command);
+            info!("Profiling command: {final_command}");
             let child = self.launch_command_with_affinity(&final_command)?;
             let profile_result = profiler.profile_process(&final_command, child)?;
 
@@ -301,7 +299,7 @@ impl BenchmarkRunner {
 
         // If stop_on_log_pattern is configured, monitor the output
         if let Some(pattern) = &self.stop_on_log_pattern {
-            info!("Monitoring command output for pattern: {}", pattern);
+            info!("Monitoring command output for pattern: {pattern}");
 
             // Start monitoring the child process
             let mut monitor = LogMonitor::start_monitoring(&mut child, pattern.clone())?;
@@ -317,7 +315,7 @@ impl BenchmarkRunner {
                 // Send SIGTERM to the process
                 match child.kill() {
                     Ok(_) => debug!("Process terminated successfully"),
-                    Err(e) => warn!("Failed to terminate process: {}", e),
+                    Err(e) => warn!("Failed to terminate process: {e}"),
                 }
 
                 // Also try to terminate any child processes via process group
@@ -364,7 +362,7 @@ impl BenchmarkRunner {
         let mut results = Vec::with_capacity(commands.len());
 
         for (command, params) in commands {
-            info!("Running command with parameters: {:?}", params);
+            info!("Running command with parameters: {params:?}");
 
             // Create a new hook_args with the specific commit for this parameter combination
             let mut current_hook_args = hook_args.clone();

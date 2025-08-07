@@ -86,10 +86,10 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
         .context("Failed to get app config directory")?;
 
     let contents = std::fs::read_to_string(app_config_path)
-        .with_context(|| format!("Failed to read app config file: {:?}", app_config_path))?;
+        .with_context(|| format!("Failed to read app config file: {app_config_path:?}"))?;
 
     let mut config: AppConfig = serde_yaml::from_str(&contents)
-        .with_context(|| format!("Failed to parse YAML from file: {:?}", app_config_path))?;
+        .with_context(|| format!("Failed to parse YAML from file: {app_config_path:?}"))?;
 
     // Set the configuration path
     config.path = app_config_path.to_path_buf();

@@ -51,16 +51,14 @@ impl SystemChecker {
 
     fn get_scaling_governor(&self, cpu: usize) -> Result<String> {
         let path = format!(
-            "/sys/devices/system/cpu/cpu{}/cpufreq/scaling_governor",
-            cpu
+            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor"
         );
         Ok(fs::read_to_string(path)?.trim().to_string())
     }
 
     fn set_scaling_governor(&self, cpu: usize, governor: &str) -> Result<()> {
         let path = format!(
-            "/sys/devices/system/cpu/cpu{}/cpufreq/scaling_governor",
-            cpu
+            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor"
         );
         fs::write(path, governor)?;
         Ok(())
@@ -68,12 +66,10 @@ impl SystemChecker {
 
     fn get_cpu_freq(&self, cpu: usize) -> Result<(u64, u64)> {
         let min_path = format!(
-            "/sys/devices/system/cpu/cpu{}/cpufreq/scaling_min_freq",
-            cpu
+            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq"
         );
         let max_path = format!(
-            "/sys/devices/system/cpu/cpu{}/cpufreq/scaling_max_freq",
-            cpu
+            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_max_freq"
         );
 
         let min = fs::read_to_string(&min_path)?.trim().parse()?;
@@ -84,8 +80,7 @@ impl SystemChecker {
 
     fn set_cpu_min_freq(&self, cpu: usize, freq: u64) -> Result<()> {
         let path = format!(
-            "/sys/devices/system/cpu/cpu{}/cpufreq/scaling_min_freq",
-            cpu
+            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq"
         );
         fs::write(path, freq.to_string())?;
         Ok(())
@@ -192,8 +187,7 @@ impl SystemChecker {
                 "✗"
             };
             println!(
-                "{} CPU {:2}: Governor: {} (want: performance), Freq: {}-{} KHz",
-                gov_status, cpu, governor, min_freq, max_freq
+                "{gov_status} CPU {cpu:2}: Governor: {governor} (want: performance), Freq: {min_freq}-{max_freq} KHz"
             );
         }
 
@@ -215,7 +209,7 @@ impl SystemChecker {
 
         let perf_rate = Self::get_perf_sample_rate()?;
         let perf_status = if perf_rate == 1 { "✓" } else { "✗" };
-        println!("{} Perf sample rate: {} (want: 1)", perf_status, perf_rate);
+        println!("{perf_status} Perf sample rate: {perf_rate} (want: 1)");
 
         let power_status = if Self::check_power_supply()? {
             "✓"
