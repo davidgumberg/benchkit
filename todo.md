@@ -60,3 +60,15 @@
 - [ ] We have a way of describing a machine hardware spec
     - [x] Added a system_info dump to out_dir
     - [ ] Should we include more than this?
+
+## AMS
+
+- Bake in the various setup scripts into benchkit binary
+- Create an instrumented build script
+- Make sure everything stays seperate
+- In terms of prior state:
+  - Assumutxo (done)
+  - data dir (for migrations)
+  - clean (no prior state)
+
+Static box with nightly checkout of repo
