@@ -107,8 +107,6 @@ impl MergeableConfiguration<HashMap<String, Value>> for BenchmarkOptions {
 pub struct BenchmarkGlobalConfig {
     /// Default benchmark options
     pub benchmark: Option<BenchmarkOptions>,
-    /// Script paths
-    pub scripts: Option<HashMap<String, String>>,
     /// CPU cores to run the benchmark on
     pub benchmark_cores: Option<String>,
     /// CPU cores to run the main program on
@@ -215,8 +213,6 @@ pub struct SingleConfig {
     pub network: String,
     /// Address to connect to
     pub connect: Option<String>,
-    /// Custom script paths (overrides global scripts)
-    pub scripts: Option<HashMap<String, String>>,
     /// Benchmark-specific options (overrides global options)
     pub benchmark: HashMap<String, Value>,
 }

@@ -23,6 +23,9 @@ pub use repository::{RepoSource, RepositoryManager};
 mod hook_runner;
 pub use hook_runner::{HookArgs, HookRunner, HookStage};
 
+mod hooks;
+pub use hooks::{HookExecutor, NativeHookExecutor};
+
 mod results;
 pub use results::{BenchmarkResult, RunResult, RunSummary};
 

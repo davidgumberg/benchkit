@@ -17,11 +17,14 @@ mod tests {
     // Helper function to assert paths are equal after canonicalization
     // This handles cases where paths may contain symlinks (e.g., /tmp -> /private/tmp on macOS)
     fn assert_canonical_path_eq(actual: &Path, expected: &Path) {
-        let expected_canonical = expected.canonicalize()
-            .unwrap_or_else(|e| panic!("Failed to canonicalize expected path {:?}: {}", expected, e));
-        assert_eq!(actual, expected_canonical, 
-            "Path mismatch: actual {:?} != expected {:?} (canonical: {:?})", 
-            actual, expected, expected_canonical);
+        let expected_canonical = expected.canonicalize().unwrap_or_else(|e| {
+            panic!("Failed to canonicalize expected path {:?}: {}", expected, e)
+        });
+        assert_eq!(
+            actual, expected_canonical,
+            "Path mismatch: actual {:?} != expected {:?} (canonical: {:?})",
+            actual, expected, expected_canonical
+        );
     }
 
     #[test]
@@ -118,7 +121,6 @@ mod tests {
             env: None,
             network: "main".to_string(),
             connect: None,
-            scripts: None,
             benchmark: HashMap::new(),
         };
         assert!(valid.validate().is_ok());
@@ -129,7 +131,6 @@ mod tests {
             env: None,
             network: "main".to_string(),
             connect: None,
-            scripts: None,
             benchmark: HashMap::new(),
         };
         assert!(invalid_name.validate().is_err());
@@ -140,7 +141,6 @@ mod tests {
             env: None,
             network: "invalid".to_string(),
             connect: None,
-            scripts: None,
             benchmark: HashMap::new(),
         };
         assert!(invalid_network.validate().is_err());
@@ -154,7 +154,6 @@ mod tests {
         // Create a BenchmarkGlobalConfig with relative paths
         let config = BenchmarkGlobalConfig {
             benchmark: None,
-            scripts: None,
             benchmark_cores: None,
             runner_cores: None,
             cmake_build_args: None,

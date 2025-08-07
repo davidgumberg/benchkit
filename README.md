@@ -172,16 +172,14 @@ benchmarks:
 
 See [Internal Benchmarking](docs/INTERNAL_BENCHMARKING.md) for details on the new configuration format.
 
-## Benchmark Scripts
+## Benchmark Lifecycle Hooks
 
-The following scripts can be customized in the `scripts/` directory:
+Benchkit uses built-in lifecycle hooks to manage the benchmark environment:
 
-- `setup.sh`: Initial setup before benchmarking
-- `prepare.sh`: Preparation before each benchmark run
-- `conclude.sh`: Cleanup after each benchmark run
-- `cleanup.sh`: Final cleanup after all benchmarks
-
-These scripts now use named arguments instead of positional arguments. See [Internal Benchmarking](docs/INTERNAL_BENCHMARKING.md) for details.
+- **Setup**: Initial setup before benchmarking (creates and clears data directory)
+- **Prepare**: Preparation before each benchmark run (syncs headers and loads snapshot)
+- **Conclude**: Cleanup after each benchmark run (saves debug.log and clears data directory)
+- **Cleanup**: Final cleanup after all benchmarks (removes temporary data)
 
 ## Tips
 

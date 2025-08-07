@@ -4,7 +4,7 @@ global:
 
   # Global benchmark option defaults.
   #
-  # "benchmark" and "scripts" values will be overwritten by local options
+  # "benchmark" values will be overwritten by local options
   # specified in
   #
   #   benchmarks:
@@ -17,13 +17,6 @@ global:
     capture_output: false
     profile: true
     profile_interval: 1
-
-  # Global default script hooks for benchmarks
-  scripts:
-    setup: ./scripts/setup.sh
-    prepare: ./scripts/prepare.sh
-    conclude: ./scripts/conclude.sh
-    cleanup: ./scripts/cleanup.sh
 
   # CPU core specifications for affinity control
   # Cores to run benchmark commands on
@@ -69,7 +62,7 @@ benchmarks:
       #
       # {dbcache} here is an explicit (additional) parameterisation from
       # [parameter_lists] below.
-      command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
+      command: "bitcoind -dbcache={dbcache} -stopatheight=180000"
       profile_interval: 1
       warmup: 0
       runs: 2
@@ -86,10 +79,7 @@ benchmarks:
   # - name: "signet no assumeutxo"
   #   network: signet
   #   connect: 127.0.0.1:39333
-  #   scripts:
-  #     # Use a custom prepare script which does not do assumeutxo syncing
-  #     # for a full IBD benchmark to stopheight
-  #     prepare: ./scripts/prepare-noassumeutxo.sh
+  #   benchmark:
   #     command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
   #     profile_interval: 1
   #     warmup: 0
