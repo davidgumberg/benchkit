@@ -3,7 +3,7 @@ use log::{debug, info};
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::benchmarks::{RepoSource, RepositoryManager};
+use crate::benchmarks::{binary_exists, RepoSource, RepositoryManager};
 use crate::config::GlobalConfig;
 use crate::path_utils;
 
@@ -86,11 +86,6 @@ impl Builder {
         }
     }
 
-    fn binary_exists(&self, commit: &str) -> bool {
-        let binary_path = self.config.app.bin_dir.join(format!("bitcoind-{commit}"));
-        binary_path.exists()
-    }
-
     pub fn build(&mut self) -> Result<()> {
         debug!("Starting build");
         // If we're using a remote repository, ensure it's available
@@ -117,7 +112,7 @@ impl Builder {
 
         // Build all commits up-front
         for commit in &self.config.bench.global.commits {
-            if !self.binary_exists(commit) {
+            if !binary_exists(&self.config.app.bin_dir, commit) {
                 info!("Building binary for commit {commit}");
                 self.build_commit(&source_dir, commit)?;
             } else {

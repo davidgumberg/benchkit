@@ -135,8 +135,6 @@ fn main() -> Result<()> {
             builder.build()?;
         }
         Commands::Run { name, out_dir } => {
-            let mut builder = benchmarks::Builder::new(config.clone())?;
-            builder.build()?;
             if let Some(runner_cores) = &config.bench.global.runner_cores {
                 use benchkit::command::CommandExecutor;
                 CommandExecutor::bind_current_process_to_cores(runner_cores)?;

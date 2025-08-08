@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::benchmarks::hook_runner::HookArgs;
 use crate::benchmarks::parameters::ParameterList;
+use crate::benchmarks::utils::check_binaries_exist;
 use crate::config::{ConfigAdapter, GlobalConfig, SingleConfig};
 use crate::download::SnapshotInfo;
 use crate::path_utils;
@@ -55,6 +56,23 @@ impl Runner {
 
     /// Run all or a specific benchmark
     pub fn run(&self, name: Option<&str>) -> Result<()> {
+        // Check if all required binaries exist
+        if let Err(missing_binaries) = check_binaries_exist(
+            &self.global_config.app.bin_dir,
+            &self.global_config.bench.global.commits,
+        ) {
+            let mut error_msg = String::from("Missing required binaries:\n");
+            for (commit, path) in missing_binaries {
+                error_msg.push_str(&format!(
+                    "  - Binary 'bitcoind-{}' not found at expected path: {}\n",
+                    commit,
+                    path.display()
+                ));
+            }
+            error_msg.push_str("\nPlease run 'benchkit build' to build the required binaries.");
+            anyhow::bail!(error_msg);
+        }
+
         let benchmarks = match name {
             Some(n) => {
                 let bench = self

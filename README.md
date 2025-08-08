@@ -34,6 +34,9 @@ nix develop
 # Download a signet assumeutxo snapshot
 cargo run -- snapshot download signet
 
+# Build bitcoind binaries from config
+cargo run -- build
+
 # Ensure you have a signet node accepting connections on 127.0.0.1:39333 e.g.:
 # `bitcoind -signet -port=39333 -rpcport=39332 -daemon=1`
 
@@ -48,7 +51,7 @@ Modify `benchmark.yml` to benchmark your desired commits and parameters.
 ```bash
 cargo install --path .
 
-# Now call the binary using "benchkit <options>"
+# Now call the binary as above using "benchkit <options>"
 ```
 
 ## Environment Configuration
@@ -69,7 +72,7 @@ export RUST_LOG=info
 ### Building Bitcoin Core
 
 ```bash
-# Build bitcoind binaries from config commits
+# Build bitcoind binaries from commits specified in benchmark.yml
 benchkit build
 ```
 
@@ -83,7 +86,7 @@ benchkit run --out-dir ./out
 benchkit run --name "benchmark-name" --out-dir ./out
 ```
 
-### System Performance Management
+### System Performance Management (Linux only)
 
 ```bash
 # Check current system performance settings
