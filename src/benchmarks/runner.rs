@@ -150,8 +150,13 @@ This can be downloaded with `benchkit snapshot download {}`",
             });
         }
 
-        // Create hook runner with native hooks
-        let hook_runner = crate::benchmarks::hook_runner::HookRunner::new();
+        // Create hook runner with appropriate mode
+        let mode = if let Some(mode_str) = &bench.mode {
+            crate::benchmarks::HookMode::mode_from_str(mode_str)?
+        } else {
+            crate::benchmarks::HookMode::default()
+        };
+        let hook_runner = crate::benchmarks::hook_runner::HookRunner::with_mode(mode);
 
         // Create benchmark runner with optional profiling
         let benchmark_runner = crate::benchmarks::benchmark_runner::BenchmarkRunner::builder(

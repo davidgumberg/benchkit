@@ -1,0 +1,40 @@
+---
+# Full IBD Mode Example
+#
+# This example demonstrates the Full IBD (Initial Block Download) mode, which
+# performs a complete sync from genesis without using snapshots. This is useful
+# for benchmarking the full sync process.
+
+global:
+  benchmark:
+    warmup: 0
+    runs: 1
+    profile: true
+    profile_interval: 1
+
+  benchmark_cores: "1-7"
+  runner_cores: "0"
+
+  source: $HOME/src/core/bitcoin
+  scratch: $HOME/.local/state/benchkit/scratch
+  commits: ["af7402ccfa", "d1b583181d"]
+  tmp_data_dir: /tmp/benchkit
+
+benchmarks:
+  - name: "full ibd signet sync"
+    network: signet
+    connect: 127.0.0.1:39333
+    mode: full_ibd  # Use Full IBD mode - no assumeutxo snapshot syncing
+    benchmark:
+      command: "bitcoind -stopatheight=1000"
+      profile: true
+
+  - name: "full ibd with dbcache variations"
+    network: signet
+    connect: 127.0.0.1:39333
+    mode: full_ibd
+    benchmark:
+      command: "bitcoind -dbcache={dbcache} -stopatheight=500"
+      parameter_lists:
+        - var: dbcache
+          values: ["450", "1024", "2048"]

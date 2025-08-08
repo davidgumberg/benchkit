@@ -120,6 +120,7 @@ mod tests {
             env: None,
             network: "main".to_string(),
             connect: None,
+            mode: None,
             benchmark: HashMap::new(),
         };
         assert!(valid.validate().is_ok());
@@ -130,6 +131,7 @@ mod tests {
             env: None,
             network: "main".to_string(),
             connect: None,
+            mode: None,
             benchmark: HashMap::new(),
         };
         assert!(invalid_name.validate().is_err());
@@ -140,9 +142,32 @@ mod tests {
             env: None,
             network: "invalid".to_string(),
             connect: None,
+            mode: None,
             benchmark: HashMap::new(),
         };
         assert!(invalid_network.validate().is_err());
+
+        // Valid hook mode
+        let valid_mode = SingleConfig {
+            name: "test".to_string(),
+            env: None,
+            network: "main".to_string(),
+            connect: None,
+            mode: Some("full_ibd".to_string()),
+            benchmark: HashMap::new(),
+        };
+        assert!(valid_mode.validate().is_ok());
+
+        // Invalid hook mode
+        let invalid_mode = SingleConfig {
+            name: "test".to_string(),
+            env: None,
+            network: "main".to_string(),
+            connect: None,
+            mode: Some("invalid_mode".to_string()),
+            benchmark: HashMap::new(),
+        };
+        assert!(invalid_mode.validate().is_err());
     }
 
     #[test]

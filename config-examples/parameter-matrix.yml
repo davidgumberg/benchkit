@@ -1,0 +1,43 @@
+---
+# Parameter Matrix Example
+#
+# This example demonstrates how to use parameter matrices to run benchmarks
+# with different combinations of parameters. Benchkit will run every combination
+# of the provided parameter values.
+
+global:
+  benchmark:
+    warmup: 1
+    runs: 2
+    profile: true
+    profile_interval: 1
+
+  benchmark_cores: "1-7"
+  runner_cores: "0"
+
+  source: $HOME/src/core/bitcoin
+  scratch: $HOME/.local/state/benchkit/scratch
+  commits: ["af7402ccfa", "d1b583181d"]
+  tmp_data_dir: /tmp/benchkit
+
+benchmarks:
+  - name: "dbcache variations"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      command: "bitcoind -dbcache={dbcache} -stopatheight=1000"
+      parameter_lists:
+        - var: dbcache
+          values: ["450", "1024", "2048", "4096"]
+
+  - name: "multiple parameter matrix"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      # This will run all combinations: 3 dbcache × 2 maxmempool = 6 total runs
+      command: "bitcoind -dbcache={dbcache} -maxmempool={maxmempool} -stopatheight=500"
+      parameter_lists:
+        - var: dbcache
+          values: ["450", "1024", "2048"]
+        - var: maxmempool
+          values: ["300", "500"]

@@ -213,6 +213,9 @@ pub struct SingleConfig {
     pub network: String,
     /// Address to connect to
     pub connect: Option<String>,
+    /// Hook mode to use (assumeutxo, full_ibd)
+    #[serde(default)]
+    pub mode: Option<String>,
     /// Benchmark-specific options (overrides global options)
     pub benchmark: HashMap<String, Value>,
 }
@@ -228,6 +231,12 @@ impl SingleConfig {
         match self.network.as_str() {
             "main" | "test" | "signet" | "regtest" => {}
             _ => anyhow::bail!("Invalid network type: {}", self.network),
+        }
+
+        // Validate hook mode if specified
+        if let Some(mode) = &self.mode {
+            use crate::benchmarks::HookMode;
+            HookMode::mode_from_str(mode)?;
         }
 
         Ok(())

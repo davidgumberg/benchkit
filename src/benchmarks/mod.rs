@@ -24,7 +24,7 @@ mod hook_runner;
 pub use hook_runner::{HookArgs, HookRunner, HookStage};
 
 mod hooks;
-pub use hooks::{HookExecutor, NativeHookExecutor};
+pub use hooks::{AssumeUtxoHookExecutor, FullIbdHookExecutor, HookExecutor, HookMode};
 
 mod results;
 pub use results::{BenchmarkResult, RunResult, RunSummary};

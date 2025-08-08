@@ -2,7 +2,9 @@ use anyhow::Result;
 use log::info;
 use std::path::PathBuf;
 
-use crate::benchmarks::hooks::{HookExecutor, NativeHookExecutor};
+use crate::benchmarks::hooks::{
+    AssumeUtxoHookExecutor, FullIbdHookExecutor, HookExecutor, HookMode,
+};
 
 /// Represents the different hook script stages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,11 +50,19 @@ impl Default for HookRunner {
 }
 
 impl HookRunner {
-    /// Create a new HookRunner with native hooks
+    /// Create a new HookRunner with default (AssumeUTXO) hooks
     pub fn new() -> Self {
-        Self {
-            executor: Box::new(NativeHookExecutor::new()),
-        }
+        Self::with_mode(HookMode::default())
+    }
+
+    /// Create a new HookRunner with the specified mode
+    pub fn with_mode(mode: HookMode) -> Self {
+        let executor: Box<dyn HookExecutor> = match mode {
+            HookMode::AssumeUtxo => Box::new(AssumeUtxoHookExecutor::new()),
+            HookMode::FullIbd => Box::new(FullIbdHookExecutor::new()),
+        };
+
+        Self { executor }
     }
 
     /// Run a hook for the given stage

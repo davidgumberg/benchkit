@@ -54,11 +54,16 @@ benchmarks:
     # An optional address for bitcoind to -connect to for sync
     connect: 127.0.0.1:39333
 
+    # Hook mode to use (optional, defaults to "assumeutxo")
+    # Options: "assumeutxo" (uses snapshot syncing), "full_ibd" (full initial block download)
+    # mode: assumeutxo
+
     # Local benchmark options.
     # These override global benchmark options in case of conflict.
     benchmark:
-      # The correct binary for the [commit] will be substituted and the
-      # (bitcoin) [network] applied automatically.
+      # The correct binary for the [commit] will be substituted.
+      # NOTE: -chain, -datadir, and -connect are automatically added by benchkit.
+      # Only specify additional parameters here.
       #
       # {dbcache} here is an explicit (additional) parameterisation from
       # [parameter_lists] below.
@@ -75,35 +80,10 @@ benchmarks:
           # A list of values to substitute in.
           values: ["450", "32000"]
 
-  # Example using a full sync rather than assumeutxo
-  # - name: "signet no assumeutxo"
-  #   network: signet
-  #   connect: 127.0.0.1:39333
-  #   benchmark:
-  #     command: "bitcoind -dbcache={dbcache} -stopatheight=170000"
-  #     profile_interval: 1
-  #     warmup: 0
-  #     runs: 1
-  #     parameter_lists:
-  #       - var: dbcache
-  #         values: ["32000"]
+      # Optional regex pattern to stop the benchmark when matched in log output
+      # Cannot be used with profiling (profiling takes precedence)
+      # stop_on_log_pattern: "UpdateTip: new best=.* height=200000"
 
-  # Example using stop_on_log_pattern (regex) to stop when a new block is found
-  # - name: "stop on new block"
-  #   network: signet
-  #   connect: 127.0.0.1:39333
-  #   benchmark:
-  #     command: "bitcoind"
-  #     stop_on_log_pattern: ".*height=200000.*"
-  #     profile: false  # Profiling not compatible with stop_on_log_pattern
-  #     warmup: 0
-  #     runs: 1
+      # Capture and store command output (default: false)
+      # capture_output: true
 
-  # More advanced regex pattern examples:
-  # - name: "stop at specific height"
-  #   benchmark:
-  #     stop_on_log_pattern: "UpdateTip: new best=.* height=200000"
-  #
-  # - name: "stop at progress threshold"
-  #   benchmark:
-  #     stop_on_log_pattern: "progress=0\\.11[6-9]"  # 0.116 or higher

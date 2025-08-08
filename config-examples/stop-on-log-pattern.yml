@@ -1,0 +1,56 @@
+---
+# Stop on Log Pattern Example
+#
+# This example demonstrates using regex patterns to stop benchmarks when
+# specific log messages are detected. This is useful for stopping at exact
+# conditions without needing to predict block heights or timing.
+
+global:
+  benchmark:
+    warmup: 0
+    runs: 1
+    profile: false  # Profiling not compatible with stop_on_log_pattern
+
+  benchmark_cores: "1-7" 
+  runner_cores: "0"
+
+  source: $HOME/src/core/bitcoin
+  scratch: $HOME/.local/state/benchkit/scratch
+  commits: ["af7402ccfa"]
+  tmp_data_dir: /tmp/benchkit
+
+benchmarks:
+  - name: "stop at specific height"
+    network: signet
+    connect: 127.0.0.1:39333
+    mode: full_ibd
+    benchmark:
+      command: "bitcoind"
+      # Stop when reaching exactly height 5000
+      stop_on_log_pattern: "UpdateTip: new best=.* height=5000"
+
+  - name: "stop at progress threshold"  
+    network: signet
+    connect: 127.0.0.1:39333
+    mode: assumeutxo
+    benchmark:
+      command: "bitcoind"
+      # Stop when progress reaches 0.116 or higher (11.6% or more)
+      stop_on_log_pattern: "progress=0\\.11[6-9]"
+
+  - name: "stop on specific date"
+    network: signet
+    connect: 127.0.0.1:39333
+    mode: full_ibd
+    benchmark:
+      command: "bitcoind"
+      # Stop when reaching blocks from a specific date
+      stop_on_log_pattern: "date='2024-04-18"
+
+  - name: "stop when new best block found"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      command: "bitcoind"
+      # Simple pattern - stop on any new best block
+      stop_on_log_pattern: "UpdateTip: new best="
