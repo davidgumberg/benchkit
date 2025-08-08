@@ -9,6 +9,7 @@ use crate::benchmarks::export::ResultExporter;
 use crate::benchmarks::hook_runner::{HookArgs, HookRunner, HookStage};
 use crate::benchmarks::log_monitor::LogMonitor;
 use crate::benchmarks::parameters::{ParameterList, ParameterMatrix, ParameterUtils};
+use crate::benchmarks::perf::PerfInstrumentor;
 use crate::benchmarks::profiler::{ProfileResult, Profiler};
 use crate::benchmarks::results::{BenchmarkResult, ResultAnalyzer, RunResult};
 use crate::command::CommandExecutor;
@@ -34,6 +35,8 @@ pub struct BenchmarkRunner {
     benchmark_cores: Option<String>,
     /// Optional regex pattern to stop the benchmark when matched
     stop_on_log_pattern: Option<String>,
+    /// Whether to enable perf instrumentation
+    enable_perf_instrumentation: bool,
 }
 
 /// Builder for BenchmarkRunner
@@ -46,6 +49,7 @@ pub struct BenchmarkRunnerBuilder {
     profile_interval: u64,
     benchmark_cores: Option<String>,
     stop_on_log_pattern: Option<String>,
+    enable_perf_instrumentation: bool,
 }
 
 impl BenchmarkRunnerBuilder {
@@ -60,6 +64,7 @@ impl BenchmarkRunnerBuilder {
             profile_interval: 5, // Default to 5 second interval
             benchmark_cores: None,
             stop_on_log_pattern: None,
+            enable_perf_instrumentation: false,
         }
     }
 
@@ -96,10 +101,24 @@ impl BenchmarkRunnerBuilder {
         self
     }
 
+    /// Enable perf instrumentation
+    pub fn perf_instrumentation(mut self, enable: bool) -> Self {
+        self.enable_perf_instrumentation = enable;
+        self
+    }
+
     /// Build the BenchmarkRunner, validating parameters if needed
     pub fn build(self) -> Result<BenchmarkRunner> {
-        // Validate configuration if needed
-        // For example, ensure out_dir exists or can be created
+        // Validate configuration
+        if self.enable_profiling && self.enable_perf_instrumentation {
+            anyhow::bail!("Cannot enable both profiling and perf instrumentation simultaneously");
+        }
+
+        if self.enable_perf_instrumentation {
+            // Validate perf is available before building
+            PerfInstrumentor::validate_perf_available()
+                .context("perf instrumentation requested but perf is not available")?;
+        }
 
         // Create the BenchmarkRunner
         Ok(BenchmarkRunner {
@@ -111,6 +130,7 @@ impl BenchmarkRunnerBuilder {
             profile_interval: self.profile_interval,
             benchmark_cores: self.benchmark_cores,
             stop_on_log_pattern: self.stop_on_log_pattern,
+            enable_perf_instrumentation: self.enable_perf_instrumentation,
         })
     }
 }
@@ -142,52 +162,47 @@ impl BenchmarkRunner {
         params: &HashMap<String, String>,
     ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
-        info!("Running benchmark: {command} for {runs} runs (commit: {commit})");
+
+        let total_runs = if self.enable_perf_instrumentation {
+            runs * 2 // Each benchmark gets both uninstrumented and instrumented runs
+        } else {
+            runs
+        };
+
+        info!(
+            "Running benchmark: {command} for {runs} runs (commit: {commit}){}",
+            if self.enable_perf_instrumentation {
+                " with perf instrumentation"
+            } else {
+                ""
+            }
+        );
 
         // Run the setup script once before all benchmark runs
         self.hook_runner.run_hook(HookStage::Setup, hook_args)?;
-        let mut results = Vec::with_capacity(runs);
+        let mut results = Vec::with_capacity(total_runs);
 
-        for i in 0..runs {
-            // Create iteration-specific hook args with parameter directory
-            let params_dir = ParameterUtils::params_to_dirname(params);
-            let iter_args = HookArgs {
-                iteration: i,
-                params_dir: params_dir.clone(),
-                ..hook_args.clone()
-            };
+        // Execute the benchmark runs
+        if self.enable_perf_instrumentation {
+            // Run each benchmark twice: uninstrumented then instrumented
+            for i in 0..runs {
+                // Run uninstrumented version first
+                let result =
+                    self.execute_single_run(command, i * 2, commit, params, hook_args, false)?;
+                results.push(result);
 
-            // Run prepare script before the benchmark run
-            self.hook_runner.run_hook(HookStage::Prepare, &iter_args)?;
-            let start = Instant::now();
-            let (output, profile_result) = self.execute_command(command, i, commit, params)?;
-            // Stop timing (if we're not profiling, otherwise the profiler takes care of timing)
-            let duration = start.elapsed();
-            let duration_ms = if let Some(profile) = &profile_result {
-                // Use the duration from the profiler if available
-                profile.duration * 1000.0
-            } else {
-                duration.as_secs_f64() * 1000.0
-            };
-
-            // Record result
-            let run_result = RunResult {
-                iteration: i,
-                duration_ms,
-                exit_code: output.status.code().unwrap_or(-1),
-                output: if self.capture_output {
-                    // Only store output if explicitly requested
-                    Some(String::from_utf8_lossy(&output.stdout).to_string())
-                } else {
-                    None
-                },
-                profile: profile_result,
-            };
-
-            results.push(run_result);
-
-            // Run conclude script after the benchmark run
-            self.hook_runner.run_hook(HookStage::Conclude, &iter_args)?;
+                // Run instrumented version second
+                let result =
+                    self.execute_single_run(command, i * 2 + 1, commit, params, hook_args, true)?;
+                results.push(result);
+            }
+        } else {
+            // Run normally without instrumentation
+            for i in 0..runs {
+                let result =
+                    self.execute_single_run(command, i, commit, params, hook_args, false)?;
+                results.push(result);
+            }
         }
 
         // Run the cleanup script once after all benchmark runs
@@ -205,6 +220,111 @@ impl BenchmarkRunner {
         };
 
         Ok(benchmark_result)
+    }
+
+    /// Execute a single benchmark run (either instrumented or uninstrumented)
+    fn execute_single_run(
+        &self,
+        command: &str,
+        iteration: usize,
+        commit: &str,
+        params: &HashMap<String, String>,
+        hook_args: &HookArgs,
+        use_perf_instrumentation: bool,
+    ) -> Result<RunResult> {
+        // Create iteration-specific hook args with parameter directory
+        let params_dir = ParameterUtils::params_to_dirname(params);
+        let iter_args = HookArgs {
+            iteration,
+            params_dir: params_dir.clone(),
+            ..hook_args.clone()
+        };
+
+        // Run prepare script before the benchmark run
+        self.hook_runner.run_hook(HookStage::Prepare, &iter_args)?;
+
+        let start = Instant::now();
+        let (output, profile_result) = if use_perf_instrumentation {
+            let (output, profile, _) =
+                self.execute_command_with_perf(command, iteration, commit, params)?;
+            (output, profile)
+        } else {
+            self.execute_command(command, iteration, commit, params)?
+        };
+
+        // Stop timing (if we're not profiling, otherwise the profiler takes care of timing)
+        let duration = start.elapsed();
+        let duration_ms = if let Some(profile) = &profile_result {
+            // Use the duration from the profiler if available
+            profile.duration * 1000.0
+        } else {
+            duration.as_secs_f64() * 1000.0
+        };
+
+        // Record result
+        let run_result = RunResult {
+            iteration,
+            duration_ms,
+            exit_code: output.status.code().unwrap_or(-1),
+            output: if self.capture_output {
+                // Only store output if explicitly requested
+                Some(String::from_utf8_lossy(&output.stdout).to_string())
+            } else {
+                None
+            },
+            profile: profile_result,
+        };
+
+        // Run conclude script after the benchmark run
+        self.hook_runner.run_hook(HookStage::Conclude, &iter_args)?;
+
+        Ok(run_result)
+    }
+
+    /// Execute a command with perf instrumentation
+    fn execute_command_with_perf(
+        &self,
+        command: &str,
+        iteration: usize,
+        commit: &str,
+        params: &HashMap<String, String>,
+    ) -> Result<(std::process::Output, Option<ProfileResult>, Option<PathBuf>)> {
+        // Create the output directory structure for this specific run
+        let params_dir = ParameterUtils::params_to_dirname(params);
+        let perf_out_dir = self
+            .out_dir
+            .join(commit)
+            .join(params_dir)
+            .join(iteration.to_string());
+
+        let perf_instrumentor = PerfInstrumentor::new(perf_out_dir);
+        // Wrap the command with perf
+        let (perf_command_vec, perf_data_path) = perf_instrumentor.wrap_command(command)?;
+        // Convert Vec<String> to a single command string for shell execution
+        let perf_command = perf_command_vec.join(" ");
+
+        info!(
+            "Executing command with perf instrumentation: {}",
+            perf_command
+        );
+
+        let child = self.launch_command_with_affinity(&perf_command)?;
+        let output = child
+            .wait_with_output()
+            .context("Failed to wait for perf command completion")?;
+        let perf_success = perf_instrumentor.finalize_perf_data()?;
+        if !perf_success {
+            warn!("perf instrumentation may have failed - no perf.data generated");
+        }
+
+        if !output.status.success() {
+            debug!(
+                "Perf command failed with status: {}",
+                output.status.code().unwrap_or(-1)
+            );
+        }
+
+        Ok((output, None, Some(perf_data_path)))
     }
 
     /// Launch a command with CPU affinity constraints
@@ -295,22 +415,15 @@ impl BenchmarkRunner {
         // For non-profiled commands, launch and potentially monitor
         let mut child = self.launch_command_with_affinity(&final_command)?;
 
-        // If stop_on_log_pattern is configured, monitor the output
         if let Some(pattern) = &self.stop_on_log_pattern {
             info!("Monitoring command output for pattern: {pattern}");
-
-            // Start monitoring the child process
             let mut monitor = LogMonitor::start_monitoring(&mut child, pattern.clone())?;
-
             // Wait for either pattern match or process exit
             let pattern_matched = monitor
                 .wait_for_match_or_exit(&mut child, std::time::Duration::from_millis(100))?;
 
             if pattern_matched {
-                // Pattern was matched, terminate the process gracefully
                 info!("Pattern matched, terminating process");
-
-                // Send SIGTERM to the process
                 match child.kill() {
                     Ok(_) => debug!("Process terminated successfully"),
                     Err(e) => warn!("Failed to terminate process: {e}"),
@@ -325,11 +438,9 @@ impl BenchmarkRunner {
             }
         }
 
-        // Wait for the command to complete and collect output
         let output = child
             .wait_with_output()
             .context("Failed to wait for command completion")?;
-
         if !output.status.success() {
             debug!(
                 "Command failed with status: {}",

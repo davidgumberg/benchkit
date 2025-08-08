@@ -168,6 +168,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         .profiling(options.profile.unwrap_or(false), options.profile_interval)
         .benchmark_cores(self.global_config.bench.global.benchmark_cores.clone())
         .stop_on_log_pattern(options.stop_on_log_pattern.clone())
+        .perf_instrumentation(options.perf_instrumentation.unwrap_or(false))
         .build()?;
 
         // Get snapshot info
