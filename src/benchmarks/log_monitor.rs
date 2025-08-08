@@ -157,17 +157,13 @@ fn monitor_stream_with_regex<R: std::io::Read + Send + 'static>(
             }
             Err(e) => {
                 // EOF or other error, stop reading
-                debug!(
-                    "Error reading from {stream_name} after {line_count} lines: {e}"
-                );
+                debug!("Error reading from {stream_name} after {line_count} lines: {e}");
                 break;
             }
         }
     }
 
-    debug!(
-        "Finished monitoring {stream_name} stream after {line_count} lines"
-    );
+    debug!("Finished monitoring {stream_name} stream after {line_count} lines");
     Ok(())
 }
 

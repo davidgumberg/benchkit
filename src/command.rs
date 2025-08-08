@@ -149,9 +149,7 @@ impl CommandExecutor {
 
         #[cfg(not(target_os = "linux"))]
         {
-            info!(
-                "CPU binding is not supported on this platform, skipping (cores: {cores})"
-            );
+            info!("CPU binding is not supported on this platform, skipping (cores: {cores})");
         }
 
         Ok(())
@@ -275,9 +273,7 @@ impl CommandExecutor {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = child; // Suppress unused variable warning
-            debug!(
-                "CPU binding is not supported on this platform, skipping (cores: {cores})"
-            );
+            debug!("CPU binding is not supported on this platform, skipping (cores: {cores})");
         }
 
         Ok(())

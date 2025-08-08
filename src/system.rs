@@ -50,27 +50,19 @@ impl SystemChecker {
     }
 
     fn get_scaling_governor(&self, cpu: usize) -> Result<String> {
-        let path = format!(
-            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor"
-        );
+        let path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor");
         Ok(fs::read_to_string(path)?.trim().to_string())
     }
 
     fn set_scaling_governor(&self, cpu: usize, governor: &str) -> Result<()> {
-        let path = format!(
-            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor"
-        );
+        let path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor");
         fs::write(path, governor)?;
         Ok(())
     }
 
     fn get_cpu_freq(&self, cpu: usize) -> Result<(u64, u64)> {
-        let min_path = format!(
-            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq"
-        );
-        let max_path = format!(
-            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_max_freq"
-        );
+        let min_path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq");
+        let max_path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_max_freq");
 
         let min = fs::read_to_string(&min_path)?.trim().parse()?;
         let max = fs::read_to_string(&max_path)?.trim().parse()?;
@@ -79,9 +71,7 @@ impl SystemChecker {
     }
 
     fn set_cpu_min_freq(&self, cpu: usize, freq: u64) -> Result<()> {
-        let path = format!(
-            "/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq"
-        );
+        let path = format!("/sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq");
         fs::write(path, freq.to_string())?;
         Ok(())
     }

@@ -142,9 +142,7 @@ impl BenchmarkRunner {
         params: &HashMap<String, String>,
     ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
-        info!(
-            "Running benchmark: {command} for {runs} runs (commit: {commit})"
-        );
+        info!("Running benchmark: {command} for {runs} runs (commit: {commit})");
 
         // Run the setup script once before all benchmark runs
         self.hook_runner.run_hook(HookStage::Setup, hook_args)?;
@@ -244,16 +242,17 @@ impl BenchmarkRunner {
     ) -> Result<(std::process::Output, Option<ProfileResult>)> {
         // Automatically append -printtoconsole if stop_on_log_pattern is configured
         // and the command doesn't already contain it
-        let final_command =
-            if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
-                let updated_command = format!("{command} -printtoconsole");
-                debug!(
-                    "Automatically added -printtoconsole for log pattern matching: {updated_command}"
-                );
-                updated_command
-            } else {
-                command.to_string()
-            };
+        let final_command = if self.stop_on_log_pattern.is_some()
+            && !command.contains("-printtoconsole")
+        {
+            let updated_command = format!("{command} -printtoconsole");
+            debug!(
+                "Automatically added -printtoconsole for log pattern matching: {updated_command}"
+            );
+            updated_command
+        } else {
+            command.to_string()
+        };
 
         debug!("Executing command: {final_command}");
 
