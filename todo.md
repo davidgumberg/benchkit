@@ -10,6 +10,7 @@
   - [ ] data dir (for migrations)
   - [x] clean (no prior state)
 - [ ] Static box with nightly checkout of repo
+- [ ] Support an "upgrade version" benchmark
 
 ## General
 
