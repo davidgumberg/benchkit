@@ -3,6 +3,15 @@ use std::collections::HashMap;
 
 use crate::benchmarks::profiler::ProfileResult;
 
+/// Type of instrumentation used for a benchmark run
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum InstrumentationType {
+    /// Standard benchmark run without additional instrumentation
+    Uninstrumented,
+    /// Benchmark run under perf profiling instrumentation
+    PerfInstrumented,
+}
+
 /// Results from a single benchmark run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunResult {
@@ -12,6 +21,8 @@ pub struct RunResult {
     pub duration_ms: f64,
     /// Exit code from the command
     pub exit_code: i32,
+    /// Type of instrumentation used for this run
+    pub instrumentation: InstrumentationType,
     /// Output from the command (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
@@ -89,6 +100,11 @@ impl ResultAnalyzer {
         // Extract durations
         let durations: Vec<f64> = results.iter().map(|r| r.duration_ms).collect();
 
+        Self::calculate_summary_from_durations(&durations)
+    }
+
+    /// Calculate statistical summary from duration values
+    fn calculate_summary_from_durations(durations: &[f64]) -> RunSummary {
         // Calculate min and max
         let min = *durations
             .iter()
@@ -103,7 +119,7 @@ impl ResultAnalyzer {
         let mean = durations.iter().sum::<f64>() / durations.len() as f64;
 
         // Calculate median
-        let mut sorted_durations = durations.clone();
+        let mut sorted_durations = durations.to_vec();
         sorted_durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let median = if sorted_durations.len() % 2 == 0 {
             let mid = sorted_durations.len() / 2;

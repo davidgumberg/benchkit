@@ -9,6 +9,7 @@ A benchmarking toolkit designed for benchmarking Bitcoin Core.
 - Configurable benchmark environment variables
 - CPU affinity control for more consistent benchmark results (Linux only)
 - System performance tuning and monitoring
+- Process profiling and perf instrumentation (Linux only)
 - Nix flake for integrated build and run shell environment
 - AssumeUTXO snapshot management
 
@@ -211,6 +212,7 @@ benchmark:
 ```
 
 Profiling will:
+
 - Track all child processes (including forks)
 - Record CPU, memory, disk I/O stats over time
 - Generate both JSON and CSV output files
@@ -219,6 +221,7 @@ Profiling will:
 ### Profiling Output
 
 Profiling results are stored in the benchmark output directory, subdirectoried undeer the run iteration:
+
 - `<iteration>/profile_data.json` - Complete profiling data
 - `<iteration>/profile_data.csv` - CSV format for easy visualization
 
@@ -226,9 +229,45 @@ The results include per-sample metrics for CPU usage (percentage), memory usage
 (bytes), virtual memory usage (bytes), disk read/write (bytes), and elapsed
 time.
 
+## Perf Instrumentation (Linux only)
+
+Benchkit supports running benchmarks under `perf` for detailed CPU profiling with call graphs.
+When enabled, each benchmark runs twice: once normally and once under perf instrumentation.
+
+### Enabling Perf Instrumentation
+
+Add to your benchmark configuration:
+
+```yaml
+benchmark:
+  perf_instrumentation: true
+```
+
+Requirements:
+
+- Linux only
+- `perf` must be installed
+- Binaries built with `-fno-omit-frame-pointer` for better call graphs
+
+### Perf Output
+
+Perf data is stored alongside benchmark results:
+
+- `<iteration>/perf.data` - Raw perf profiling data
+
+Use standard perf tools to analyze:
+
+```bash
+perf report -i <iteration>/perf.data
+perf script -i <iteration>/perf.data
+```
+
+Note: Perf instrumentation cannot be used with regular profiling - they are mutually exclusive.
+
 ## Contributing
 
 Contributions are welcome! Please ensure your code:
+
 - Updates documentation as needed
 - Follows the project's code style
 

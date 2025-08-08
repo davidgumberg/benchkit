@@ -11,7 +11,7 @@ use crate::benchmarks::log_monitor::LogMonitor;
 use crate::benchmarks::parameters::{ParameterList, ParameterMatrix, ParameterUtils};
 use crate::benchmarks::perf::PerfInstrumentor;
 use crate::benchmarks::profiler::{ProfileResult, Profiler};
-use crate::benchmarks::results::{BenchmarkResult, ResultAnalyzer, RunResult};
+use crate::benchmarks::results::{BenchmarkResult, InstrumentationType, ResultAnalyzer, RunResult};
 use crate::command::CommandExecutor;
 
 /// Low-level benchmark executor that handles the actual command execution and measurement
@@ -266,6 +266,11 @@ impl BenchmarkRunner {
             iteration,
             duration_ms,
             exit_code: output.status.code().unwrap_or(-1),
+            instrumentation: if use_perf_instrumentation {
+                InstrumentationType::PerfInstrumented
+            } else {
+                InstrumentationType::Uninstrumented
+            },
             output: if self.capture_output {
                 // Only store output if explicitly requested
                 Some(String::from_utf8_lossy(&output.stdout).to_string())

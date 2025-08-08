@@ -27,7 +27,7 @@ mod hooks;
 pub use hooks::{AssumeUtxoHookExecutor, FullIbdHookExecutor, HookExecutor, HookMode};
 
 mod results;
-pub use results::{BenchmarkResult, RunResult, RunSummary};
+pub use results::{BenchmarkResult, InstrumentationType, RunResult, RunSummary};
 
 mod parameters;
 pub use parameters::{ParameterList, ParameterMatrix};
