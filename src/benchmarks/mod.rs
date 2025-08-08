@@ -47,5 +47,8 @@ pub use runner::Runner;
 mod log_monitor;
 pub use log_monitor::{LogMonitor, LogMonitorBuilder};
 
+mod perf;
+pub use perf::{PerfInstrumentor, PerfInstrumentorBuilder};
+
 mod utils;
 pub use utils::{binary_exists, check_binaries_exist, get_binary_path};

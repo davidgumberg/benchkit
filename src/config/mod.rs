@@ -135,7 +135,9 @@ impl BenchmarkOptions {
             result.stop_on_log_pattern = Some(stop_on_log_pattern.to_string());
         }
 
-        if let Some(perf_instrumentation) = map.get("perf_instrumentation").and_then(|v| v.as_bool()) {
+        if let Some(perf_instrumentation) =
+            map.get("perf_instrumentation").and_then(|v| v.as_bool())
+        {
             result.perf_instrumentation = Some(perf_instrumentation);
         }
 
@@ -397,6 +399,7 @@ mod tests {
             profile: Some(false),
             profile_interval: Some(5),
             stop_on_log_pattern: None,
+            perf_instrumentation: None,
         };
 
         let mut override_map = HashMap::new();
