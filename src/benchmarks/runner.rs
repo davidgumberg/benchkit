@@ -186,19 +186,14 @@ This can be downloaded with `benchkit snapshot download {}`",
 
         // Get command template
         let command_template = match &options.command {
-            Some(cmd) => {
-                // Update command to use full binary path and apply chain param
-                cmd.replace(
-                    "bitcoind",
-                    &format!(
-                        "{}/bitcoind-{{commit}} -chain={} -datadir={} -connect={}",
-                        self.global_config.app.bin_dir.display(),
-                        bench.network,
-                        self.global_config.bench.global.tmp_data_dir.display(),
-                        bench.connect.clone().unwrap_or_default(),
-                    ),
-                )
-            }
+            Some(cmd) => crate::benchmarks::utils::build_benchmark_command(
+                &self.global_config.app.bin_dir,
+                "{commit}",
+                &bench.network,
+                &self.global_config.bench.global.tmp_data_dir,
+                &bench.connect.clone().unwrap_or_default(),
+                cmd,
+            ),
             None => anyhow::bail!(
                 "No command template specified for benchmark: {}",
                 bench.name

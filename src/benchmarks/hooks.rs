@@ -151,45 +151,43 @@ impl HookExecutor for AssumeUtxoHookExecutor {
 
     fn prepare(&self, args: &HookArgs) -> Result<()> {
         info!("Running AssumeUTXO prepare hook");
-
-        // Create datadir and clear contents
         self.base.clear_and_recreate_directory(&args.tmp_data_dir)?;
-
-        // Replace {commit} placeholder in binary path
         let binary_path = args.binary.replace("{commit}", &args.commit);
-
-        // Sync headers
         info!("Syncing headers");
-        let datadir_arg = format!("-datadir={}", args.tmp_data_dir.display());
-        let connect_arg = format!("-connect={}", args.connect_address);
-        let chain_arg = format!("-chain={}", args.network);
+        let mut base_args = crate::benchmarks::utils::build_bitcoind_base_args(
+            &args.network,
+            &args.tmp_data_dir,
+            &args.connect_address,
+        );
 
-        let sync_args = vec![
-            datadir_arg.as_str(),
-            connect_arg.as_str(),
-            "-daemon=0",
-            chain_arg.as_str(),
-            "-stopatheight=1",
-            "-printtoconsole=0",
-        ];
+        base_args.extend_from_slice(&[
+            "-daemon=0".to_string(),
+            "-stopatheight=1".to_string(),
+            "-printtoconsole=0".to_string(),
+        ]);
+
+        // Convert to &str references for execute_bitcoin_command
+        let sync_args: Vec<&str> = base_args.iter().map(|s| s.as_str()).collect();
         self.execute_bitcoin_command(&binary_path, &sync_args)?;
 
-        // Load snapshot (allow failure with || true)
+        // Load snapshot
         info!("Loading snapshot");
-        let datadir_arg2 = format!("-datadir={}", args.tmp_data_dir.display());
-        let connect_arg2 = format!("-connect={}", args.connect_address);
-        let chain_arg2 = format!("-chain={}", args.network);
-        let snapshot_arg = format!("-loadutxosnapshot={}", args.snapshot_path.display());
+        let mut base_args = crate::benchmarks::utils::build_bitcoind_base_args(
+            &args.network,
+            &args.tmp_data_dir,
+            &args.connect_address,
+        );
 
-        let snapshot_args = vec![
-            datadir_arg2.as_str(),
-            connect_arg2.as_str(),
-            "-daemon=0",
-            chain_arg2.as_str(),
-            "-pausebackgroundsync=1",
-            snapshot_arg.as_str(),
-            "-printtoconsole=0",
-        ];
+        // Add snapshot-specific arguments
+        base_args.extend_from_slice(&[
+            "-daemon=0".to_string(),
+            "-pausebackgroundsync=1".to_string(),
+            format!("-loadutxosnapshot={}", args.snapshot_path.display()),
+            "-printtoconsole=0".to_string(),
+        ]);
+
+        // Convert to &str references for execute_bitcoin_command
+        let snapshot_args: Vec<&str> = base_args.iter().map(|s| s.as_str()).collect();
         self.execute_bitcoin_command_allow_failure(&binary_path, &snapshot_args)?;
 
         Ok(())

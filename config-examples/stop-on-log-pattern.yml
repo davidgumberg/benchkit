@@ -22,7 +22,7 @@ global:
 benchmarks:
   - name: "stop at specific height"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     mode: full_ibd
     benchmark:
       command: "bitcoind"
@@ -31,7 +31,7 @@ benchmarks:
 
   - name: "stop at progress threshold"  
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     mode: assumeutxo
     benchmark:
       command: "bitcoind"
@@ -40,7 +40,7 @@ benchmarks:
 
   - name: "stop on specific date"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     mode: full_ibd
     benchmark:
       command: "bitcoind"
@@ -49,7 +49,7 @@ benchmarks:
 
   - name: "stop when new best block found"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     benchmark:
       command: "bitcoind"
       # Simple pattern - stop on any new best block

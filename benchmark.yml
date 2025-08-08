@@ -52,7 +52,7 @@ benchmarks:
     network: signet
 
     # An optional address for bitcoind to -connect to for sync
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
 
     # Hook mode to use (optional, defaults to "assumeutxo")
     # Options: "assumeutxo" (uses snapshot syncing), "full_ibd" (full initial block download)

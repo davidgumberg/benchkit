@@ -23,7 +23,7 @@ global:
 benchmarks:
   - name: "dbcache variations"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     benchmark:
       command: "bitcoind -dbcache={dbcache} -stopatheight=1000"
       parameter_lists:
@@ -32,7 +32,7 @@ benchmarks:
 
   - name: "multiple parameter matrix"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     benchmark:
       # This will run all combinations: 3 dbcache × 2 maxmempool = 6 total runs
       command: "bitcoind -dbcache={dbcache} -maxmempool={maxmempool} -stopatheight=500"

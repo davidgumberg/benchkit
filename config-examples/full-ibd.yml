@@ -23,7 +23,7 @@ global:
 benchmarks:
   - name: "full ibd signet sync"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     mode: full_ibd  # Use Full IBD mode - no assumeutxo snapshot syncing
     benchmark:
       command: "bitcoind -stopatheight=1000"
@@ -31,7 +31,7 @@ benchmarks:
 
   - name: "full ibd with dbcache variations"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     mode: full_ibd
     benchmark:
       command: "bitcoind -dbcache={dbcache} -stopatheight=500"

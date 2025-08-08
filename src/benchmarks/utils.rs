@@ -1,5 +1,11 @@
 use std::path::{Path, PathBuf};
 
+/// Default port for Bitcoin Core P2P connections
+pub const DEFAULT_P2P_PORT: u16 = 12000;
+
+/// Default port for Bitcoin Core RPC connections
+pub const DEFAULT_RPC_PORT: u16 = 12001;
+
 /// Check if a binary exists for a given commit
 pub fn binary_exists(bin_dir: &Path, commit: &str) -> bool {
     let binary_path = get_binary_path(bin_dir, commit);
@@ -30,4 +36,35 @@ pub fn check_binaries_exist(
     } else {
         Err(missing_binaries)
     }
+}
+
+/// Build base bitcoind command arguments that are common across all invocations
+pub fn build_bitcoind_base_args(network: &str, datadir: &Path, connect: &str) -> Vec<String> {
+    let mut args = vec![
+        format!("-chain={}", network),
+        format!("-port={}", DEFAULT_P2P_PORT),
+        format!("-rpcport={}", DEFAULT_RPC_PORT),
+        format!("-datadir={}", datadir.display()),
+    ];
+
+    if !connect.is_empty() {
+        args.push(format!("-connect={}", connect));
+    }
+
+    args
+}
+
+/// Build the full benchmark command with parameter substitution
+pub fn build_benchmark_command(
+    bin_dir: &Path,
+    commit_placeholder: &str,
+    network: &str,
+    datadir: &Path,
+    connect: &str,
+    command_template: &str,
+) -> String {
+    let bitcoind_path = format!("{}/bitcoind-{}", bin_dir.display(), commit_placeholder);
+    let base_args = build_bitcoind_base_args(network, datadir, connect);
+    let base_args_str = base_args.join(" ");
+    command_template.replace("bitcoind", &format!("{} {}", bitcoind_path, base_args_str))
 }

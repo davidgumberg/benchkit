@@ -22,7 +22,7 @@ global:
 benchmarks:
   - name: "assumeutxo signet sync"
     network: signet
-    connect: 127.0.0.1:39333
+    connect: 127.0.0.1:38333
     # mode: assumeutxo  # This is the default, so can be omitted
     benchmark:
       command: "bitcoind -stopatheight=180000"
