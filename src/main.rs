@@ -33,10 +33,6 @@ struct Cli {
     /// Benchmark config
     #[arg(short, long, default_value = DEFAULT_BENCH_CONFIG)]
     bench_config: PathBuf,
-
-    /// Run ID (for CI)
-    #[arg(short, long, env = "BENCH_RUN_ID")]
-    run_id: Option<i64>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -92,7 +88,7 @@ enum SnapshotCommands {
 
 #[derive(Subcommand, Debug)]
 enum PatchCommands {
-    /// Downloade latest patches from GitHub
+    /// Download latest patches from GitHub
     Update {},
     /// Test the patches will apply cleanly
     Test {},
@@ -116,17 +112,8 @@ fn main() -> Result<()> {
         process::exit(0);
     }
 
-    // If we didn't get a run_id generate a random one.
-    // The run_id is used as a temporary directory for the run, collecting artifacts/pusing to S3
-    // buckets.
-    let run_id = cli.run_id.unwrap_or_else(|| {
-        let id = generate_id(false);
-        warn!("No run_id specified. Generated random run_id: {id}");
-        id
-    });
-
     let app: AppConfig = load_app_config(&cli.app_config)?;
-    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config, run_id)?;
+    let bench: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
     let config = GlobalConfig { app, bench };
 
     match &cli.command {
@@ -165,14 +152,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn generate_id(pr: bool) -> i64 {
-    use rand::Rng;
-    let mut rng = rand::rng();
-    if pr {
-        rng.random_range(100_000_000..999_999_999)
-    } else {
-        rng.random_range(1000..50000)
-    }
 }

@@ -160,8 +160,6 @@ pub struct BenchmarkConfig {
     pub global: BenchmarkGlobalConfig,
     pub benchmarks: Vec<SingleConfig>,
     #[serde(default)]
-    pub run_id: i64,
-    #[serde(default)]
     pub path: PathBuf,
 }
 
@@ -216,7 +214,7 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
 }
 
 /// Load benchmark configuration from a YAML file
-pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<BenchmarkConfig> {
+pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig> {
     if !bench_config_path.exists() {
         anyhow::bail!("Benchmark config file not found: {:?}", bench_config_path);
     }
@@ -231,7 +229,6 @@ pub fn load_bench_config(bench_config_path: &PathBuf, run_id: i64) -> Result<Ben
     let mut config: BenchmarkConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {bench_config_path:?}"))?;
 
-    config.run_id = run_id;
     config.path = bench_config_path.to_path_buf();
 
     // Expand paths in global config
