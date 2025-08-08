@@ -32,6 +32,7 @@ pub struct BenchmarkOptions {
     pub profile: Option<bool>,
     pub profile_interval: Option<u64>,
     pub stop_on_log_pattern: Option<String>,
+    pub perf_instrumentation: Option<bool>,
 }
 
 fn default_warmup() -> usize {
@@ -59,6 +60,7 @@ impl BenchmarkOptions {
             profile: None,
             profile_interval: None,
             stop_on_log_pattern: None,
+            perf_instrumentation: None,
         }
     }
 
@@ -76,6 +78,14 @@ impl BenchmarkOptions {
             match Regex::new(pattern) {
                 Ok(_) => {}
                 Err(e) => anyhow::bail!("Invalid regex pattern in stop_on_log_pattern: {}", e),
+            }
+        }
+
+        // Validate perf instrumentation is only enabled on Linux
+        if let Some(true) = self.perf_instrumentation {
+            #[cfg(not(target_os = "linux"))]
+            {
+                anyhow::bail!("perf_instrumentation is only supported on Linux");
             }
         }
 
@@ -123,6 +133,10 @@ impl BenchmarkOptions {
 
         if let Some(stop_on_log_pattern) = map.get("stop_on_log_pattern").and_then(|v| v.as_str()) {
             result.stop_on_log_pattern = Some(stop_on_log_pattern.to_string());
+        }
+
+        if let Some(perf_instrumentation) = map.get("perf_instrumentation").and_then(|v| v.as_bool()) {
+            result.perf_instrumentation = Some(perf_instrumentation);
         }
 
         Ok(result)

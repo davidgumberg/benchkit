@@ -87,3 +87,8 @@ benchmarks:
       # Capture and store command output (default: false)
       # capture_output: true
 
+      # Run benchmark under perf instrumentation (Linux only)
+      # When enabled, each benchmark will run twice: uninstrumented and instrumented
+      # The instrumented run generates a perf.data file in the output directory
+      # perf_instrumentation: true
+
