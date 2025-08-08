@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::benchmarks::hook_runner::HookArgs;
 use crate::benchmarks::parameters::ParameterList;
 use crate::benchmarks::utils::check_binaries_exist;
-use crate::config::{ConfigAdapter, GlobalConfig, SingleConfig};
+use crate::config::{get_merged_options, GlobalConfig, SingleConfig};
 use crate::download::SnapshotInfo;
 use crate::path_utils;
 use crate::types::Network;
@@ -130,7 +130,7 @@ This can be downloaded with `benchkit snapshot download {}`",
         info!("Running benchmark: {:?}", bench.name);
 
         // Get merged options for this benchmark
-        let options = ConfigAdapter::get_merged_options(&self.global_config.bench, index)?;
+        let options = get_merged_options(&self.global_config.bench, index)?;
 
         // Create parameter lists for substitution
         let mut parameter_lists = if let Some(params) = &options.parameter_lists {
