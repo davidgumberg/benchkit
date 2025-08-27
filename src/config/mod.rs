@@ -8,7 +8,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::path_utils;
 
 /// Application configuration loaded from config.yml
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
     pub home_dir: PathBuf,
@@ -146,7 +146,7 @@ impl BenchmarkOptions {
 }
 
 /// Global configuration for all benchmarks
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BenchmarkGlobalConfig {
     pub benchmark: Option<BenchmarkOptions>,
     pub benchmark_cores: Option<String>,
@@ -159,7 +159,7 @@ pub struct BenchmarkGlobalConfig {
 }
 
 /// Configuration for a single benchmark
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SingleConfig {
     pub name: String,
     pub env: Option<HashMap<String, String>>,
@@ -171,7 +171,7 @@ pub struct SingleConfig {
 }
 
 /// Complete benchmark configuration
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BenchmarkConfig {
     pub global: BenchmarkGlobalConfig,
     pub benchmarks: Vec<SingleConfig>,
