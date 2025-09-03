@@ -20,12 +20,12 @@ impl SnapshotInfo {
         match network {
             Network::Main => Some(Self {
                 network: Network::Main,
-                filename: "mainnet-880000.dat",
+                filename: "utxo-880000.dat",
                 height: 880000,
             }),
             Network::Signet => Some(Self {
                 network: Network::Signet,
-                filename: "signet-160000.dat",
+                filename: "utxo-signet-160000.dat",
                 height: 160000,
             }),
         }
