@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use log::{debug, info};
 use std::path::PathBuf;
 
+use crate::benchmarks::Builder;
 use crate::benchmarks::hook_runner::HookArgs;
 use crate::benchmarks::parameters::ParameterList;
 use crate::benchmarks::utils::check_binaries_exist;
@@ -52,7 +53,11 @@ impl Runner {
     }
 
     /// Run all or a specific benchmark
-    pub fn run(&self, name: Option<&str>) -> Result<()> {
+    pub fn run(&self, name: Option<&str>, build: bool) -> Result<()> {
+        if build {
+            let mut builder = Builder::new(self.global_config.clone())?;
+            builder.build()?;
+        }
         // Check if all required binaries exist
         if let Err(missing_binaries) = check_binaries_exist(
             &self.global_config.app.bin_dir,
