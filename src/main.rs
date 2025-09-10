@@ -2,7 +2,7 @@
 use anyhow::Result;
 use benchkit::{
     benchmarks,
-    config::{load_app_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
+    config::{load_app_config, parse_bench_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
     system::SystemChecker,
 };
 
@@ -53,10 +53,35 @@ enum Commands {
         #[arg(short, long, required = true)]
         out_dir: PathBuf,
     },
+    /// For orchestrating benchmarks remotely
+    Networked {
+        #[command(subcommand)]
+        command: NetworkedCommands,
+    },
     /// Check system performance settings
     System {
         #[command(subcommand)]
         command: SystemCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum NetworkedCommands {
+    /// Start a client that listens for benchmark jobs.
+    Client {
+        #[arg(short, long, required = true)]
+        nats_url: String,
+
+        /// Output directory for storing benchmark artifacts
+        #[arg(short, long, required = true)]
+        out_dir: PathBuf,
+    },
+    /// Start a client that listens for benchmark jobs.
+    Announce {
+        #[arg(short, long, required = true)]
+        nats_url: String,
+        #[arg(short, long, required = true)]
+        benchmark_file: PathBuf,
     },
 }
 
@@ -89,6 +114,28 @@ fn main() -> Result<()> {
     }
 
     let app: AppConfig = load_app_config(&cli.app_config)?;
+
+    if let Commands::Networked { command } = &cli.command {
+        match command  {
+            NetworkedCommands::Client { nats_url, out_dir } => {
+                benchkit::networked::client::client_loop(nats_url.clone(), app.clone(), out_dir.clone());
+            }
+            NetworkedCommands::Announce { benchmark_file, nats_url } => {
+                let contents = std::fs::read_to_string(benchmark_file)
+                    .expect("Failed to read benchmark file contents.");
+
+                // String->BenchConfig->String to validate the benchmark.yml file.
+                let bench_config = parse_bench_config(contents)
+                    .expect("Failed to parse benchmark file contents.");
+                let bench_config_str = serde_yaml::to_string(&bench_config)
+                    .expect("Serialization of benchmark file failed.");
+
+                benchkit::networked::announce::announce_job(bench_config_str, nats_url)
+                    .expect("Failed to announce job.");
+            }
+        }
+    }
+
     let bench: BenchmarkConfig = load_bench_config(&cli.bench_config)?;
     let config = GlobalConfig { app, bench };
 
