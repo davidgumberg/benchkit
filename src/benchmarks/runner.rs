@@ -39,12 +39,20 @@ impl Runner {
         path_utils::prepare_output_directory(&out_dir)?;
 
         // Copy config files to output directory
-        let app_config_name = global_config.app.path.file_name().unwrap_or_default();
-        let bench_config_name = global_config.bench.path.file_name().unwrap_or_default();
+        let app_config_name = global_config.app.path
+            .file_name()
+            .unwrap_or(std::ffi::OsStr::new("app.yml"));
+        let bench_config_name = global_config.bench.path
+            .file_name()
+            .unwrap_or(std::ffi::OsStr::new("benchmark.yml"));
 
-        path_utils::copy_file(&global_config.app.path, &out_dir.join(app_config_name))?;
+        let app_config_file = std::fs::File::create(out_dir.join(app_config_name))
+                                .expect("Unable to create app config artifact in output dir.");
+        let bench_config_file = std::fs::File::create(out_dir.join(bench_config_name))
+                                .expect("Unable to create bench config artifact in output dir.");
 
-        path_utils::copy_file(&global_config.bench.path, &out_dir.join(bench_config_name))?;
+        serde_yaml::to_writer(app_config_file, &global_config.app)?;
+        serde_yaml::to_writer(bench_config_file, &global_config.bench)?;
 
         // Dump system info
         crate::system_info::dump_sys_info(&out_dir.join("system_info"))?;
