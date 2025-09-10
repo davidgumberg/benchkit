@@ -45,6 +45,12 @@ enum Commands {
         #[arg(short, long)]
         name: Option<String>,
 
+        /// Whether or not to build, true by default. When true, this is
+        /// equivalent to running `benchkit build` and `benchkit run` with this
+        /// set to false.
+        #[arg(short, long, default_value = "true")]
+        build: bool,
+
         /// Output directory for storing benchmark artifacts
         #[arg(short, long, required = true)]
         out_dir: PathBuf,
@@ -121,13 +127,13 @@ fn main() -> Result<()> {
             let mut builder = benchmarks::Builder::new(config.clone())?;
             builder.build()?;
         }
-        Commands::Run { name, out_dir } => {
+        Commands::Run { name, out_dir, build } => {
             if let Some(runner_cores) = &config.bench.global.runner_cores {
                 use benchkit::command::CommandExecutor;
                 CommandExecutor::bind_current_process_to_cores(runner_cores)?;
             }
             let runner = benchmarks::Runner::new(config.clone(), out_dir.clone())?;
-            runner.run(name.as_deref())?;
+            runner.run(name.as_deref(), *build)?;
             info!(
                 "{} completed successfully.",
                 name.as_deref().unwrap_or("All benchmarks")
