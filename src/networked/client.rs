@@ -10,9 +10,18 @@ use crate::config::{parse_bench_config, AppConfig, GlobalConfig};
 
 pub async fn listen_for_jobs(
     nats_url: &str,
+    nats_crt: Option<PathBuf>,
     job_sender: mpsc::Sender<async_nats::Message>,
 ) -> Result<(), async_nats::Error> {
-    let client = async_nats::connect(nats_url).await?;
+    let mut connect_options = async_nats::ConnectOptions::new()
+        .require_tls(true);
+
+    if let Some(nats_crt) = nats_crt {
+        connect_options = connect_options.add_root_certificates(nats_crt);
+    }
+
+    let client = connect_options.connect(nats_url).await?;
+
     let mut subscriber = client.subscribe("benchkit.jobs").await?;
     println!("Subscribed to benchkit.jobs");
     
@@ -31,7 +40,7 @@ pub async fn listen_for_jobs(
 /// Set up an async thread that listens for new jobs to be announced and adds
 /// them to the queue and a synchronous thread that waits for and executes
 /// jobs in the queue.
-pub fn client_loop(nats_url: String, app_config: AppConfig, out_dir: PathBuf) {
+pub fn client_loop(nats_url: String, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
@@ -41,7 +50,7 @@ pub fn client_loop(nats_url: String, app_config: AppConfig, out_dir: PathBuf) {
             .expect("Failed to create tokio runtime");
         
         runtime.block_on(async {
-            if let Err(e) = listen_for_jobs(&nats_url, queue_sender).await {
+            if let Err(e) = listen_for_jobs(&nats_url, nats_crt, queue_sender).await {
                 eprintln!("Job listener error: {}", e);
             }
         });
