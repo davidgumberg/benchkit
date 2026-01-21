@@ -68,3 +68,17 @@
 - [x] We have a way of describing a machine hardware spec
     - [x] Added a system_info dump to out_dir
     - [ ] Should we include more than this?
+
+
+## Networking
+
+### Announcing 
+- [x] Announcing jobs
+- [x] Listening for jobs
+
+- [ ] Authentication - RCE right now for anyone listening :)
+  - [ ] Clients should auth servers
+    - [ ] Do this via TLS root certificate.
+  - [ ] Servers need to auth publishers.
+- [ ] 
+-
