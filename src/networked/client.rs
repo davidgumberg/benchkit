@@ -14,7 +14,7 @@ pub async fn listen_for_jobs(
     nats_crt: Option<&PathBuf>,
     job_sender: mpsc::Sender<async_nats::Message>,
 ) -> Result<(), async_nats::Error> {
-    let client = create_nats_client(nats_url, nats_crt).await?;
+    let client = create_nats_client(nats_url, nats_crt, None).await?;
 
     let mut subscriber = client.subscribe("benchkit.jobs").await?;
     println!("Subscribed to benchkit.jobs");

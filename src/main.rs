@@ -88,6 +88,10 @@ enum NetworkedCommands {
         #[arg(short, long, required = true)]
         benchmark_file: PathBuf,
 
+        /// Path to a NATS NKey (seed) file used for client authentication.
+        #[arg(short = 'k', long, required = true)]
+        nkey: PathBuf,
+
         /// URL of the nats server the benchmark orchestrator will announce to.
         #[arg(short, long, required = true)]
         #[arg(short, long, required = true)]
@@ -134,7 +138,7 @@ fn main() -> Result<()> {
             NetworkedCommands::Client { out_dir, url, crt } => {
                 benchkit::networked::client::client_loop(url.clone(), crt.clone(), app.clone(), out_dir.clone());
             }
-            NetworkedCommands::Announce { benchmark_file, url, crt } => {
+            NetworkedCommands::Announce { benchmark_file, nkey, url, crt } => {
                 let contents = std::fs::read_to_string(benchmark_file)
                     .expect("Failed to read benchmark file contents.");
 
@@ -144,7 +148,7 @@ fn main() -> Result<()> {
                 let bench_config_str = serde_yaml::to_string(&bench_config)
                     .expect("Serialization of benchmark file failed.");
 
-                benchkit::networked::announce::announce_job(bench_config_str, url, crt.as_ref())
+                benchkit::networked::announce::announce_job(bench_config_str, nkey, url, crt.as_ref())
                     .expect("Failed to announce job.");
             }
         }
