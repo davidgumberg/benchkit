@@ -69,6 +69,10 @@ enum Commands {
 enum NetworkedCommands {
     /// Start a client that listens for benchmark jobs.
     Client {
+        /// Output directory for storing benchmark artifacts
+        #[arg(short, long, required = true)]
+        out_dir: PathBuf,
+
         /// URL of the nats server the benchmark client will subscribe to.
         #[arg(short, long, required = true)]
         url: String,
@@ -78,17 +82,20 @@ enum NetworkedCommands {
         /// on the NATS server, we authenticate the server.
         #[arg(short, long)]
         crt: Option<PathBuf>,
-
-        /// Output directory for storing benchmark artifacts
-        #[arg(short, long, required = true)]
-        out_dir: PathBuf,
     },
     /// Start a client that listens for benchmark jobs.
     Announce {
         #[arg(short, long, required = true)]
-        url: String,
-        #[arg(short, long, required = true)]
         benchmark_file: PathBuf,
+
+        /// URL of the nats server the benchmark orchestrator will announce to.
+        #[arg(short, long, required = true)]
+        #[arg(short, long, required = true)]
+        url: String,
+
+        /// Certificate of the nats server the benchmark client will announce to.
+        #[arg(short, long)]
+        crt: Option<PathBuf>,
     },
 }
 
@@ -124,10 +131,10 @@ fn main() -> Result<()> {
 
     if let Commands::Networked { command } = &cli.command {
         match command  {
-            NetworkedCommands::Client { url, crt, out_dir } => {
+            NetworkedCommands::Client { out_dir, url, crt } => {
                 benchkit::networked::client::client_loop(url.clone(), crt.clone(), app.clone(), out_dir.clone());
             }
-            NetworkedCommands::Announce { benchmark_file, url } => {
+            NetworkedCommands::Announce { benchmark_file, url, crt } => {
                 let contents = std::fs::read_to_string(benchmark_file)
                     .expect("Failed to read benchmark file contents.");
 
@@ -137,7 +144,7 @@ fn main() -> Result<()> {
                 let bench_config_str = serde_yaml::to_string(&bench_config)
                     .expect("Serialization of benchmark file failed.");
 
-                benchkit::networked::announce::announce_job(bench_config_str, url)
+                benchkit::networked::announce::announce_job(bench_config_str, url, crt.clone())
                     .expect("Failed to announce job.");
             }
         }
