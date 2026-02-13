@@ -144,7 +144,7 @@ fn main() -> Result<()> {
                 let bench_config_str = serde_yaml::to_string(&bench_config)
                     .expect("Serialization of benchmark file failed.");
 
-                benchkit::networked::announce::announce_job(bench_config_str, url, crt.clone())
+                benchkit::networked::announce::announce_job(bench_config_str, url, crt.as_ref())
                     .expect("Failed to announce job.");
             }
         }

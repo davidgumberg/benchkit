@@ -7,20 +7,14 @@ use std::time::SystemTime;
 
 use crate::benchmarks::Runner;
 use crate::config::{parse_bench_config, AppConfig, GlobalConfig};
+use crate::networked::nats::create_nats_client;
 
 pub async fn listen_for_jobs(
     nats_url: &str,
-    nats_crt: Option<PathBuf>,
+    nats_crt: Option<&PathBuf>,
     job_sender: mpsc::Sender<async_nats::Message>,
 ) -> Result<(), async_nats::Error> {
-    let mut connect_options = async_nats::ConnectOptions::new()
-        .require_tls(true);
-
-    if let Some(nats_crt) = nats_crt {
-        connect_options = connect_options.add_root_certificates(nats_crt);
-    }
-
-    let client = connect_options.connect(nats_url).await?;
+    let client = create_nats_client(nats_url, nats_crt).await?;
 
     let mut subscriber = client.subscribe("benchkit.jobs").await?;
     println!("Subscribed to benchkit.jobs");
@@ -50,7 +44,7 @@ pub fn client_loop(nats_url: String, nats_crt: Option<PathBuf>, app_config: AppC
             .expect("Failed to create tokio runtime");
         
         runtime.block_on(async {
-            if let Err(e) = listen_for_jobs(&nats_url, nats_crt, queue_sender).await {
+            if let Err(e) = listen_for_jobs(&nats_url, nats_crt.as_ref(), queue_sender).await {
                 eprintln!("Job listener error: {}", e);
             }
         });
