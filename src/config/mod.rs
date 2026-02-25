@@ -151,9 +151,20 @@ pub struct BenchmarkGlobalConfig {
     pub runner_cores: Option<String>,
     pub cmake_build_args: Option<Vec<String>>,
     pub source: PathBuf,
+    #[serde(default = "default_tmp_dir")]
     pub scratch: PathBuf,
-    pub commits: Vec<String>,
+    #[serde(default = "default_tmp_dir")]
     pub tmp_data_dir: PathBuf,
+    pub commits: Vec<String>,
+}
+
+fn default_tmp_dir() -> PathBuf {
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("benchkit-scratch")
+        .tempdir()
+        .expect("Error creating temporary scratch path.");
+    // TODO: actually use the tempdir type properly instead of keeping them.
+    tmp_dir.keep().to_path_buf()
 }
 
 /// Configuration for a single benchmark
@@ -253,19 +264,7 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
 
     if is_url {
         // Only expand non-URL paths
-        expand_paths(
-            &mut [&mut config.global.scratch, &mut config.global.tmp_data_dir],
-            config_dir,
-        )?;
-    } else {
-        expand_paths(
-            &mut [
-                &mut config.global.source,
-                &mut config.global.scratch,
-                &mut config.global.tmp_data_dir,
-            ],
-            config_dir,
-        )?;
+        expand_paths(&mut [&mut config.global.source], config_dir)?;
     }
 
     debug!(
