@@ -229,8 +229,8 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
 }
 
 // Deserialize and validate benchmark config from a YAML string.
-pub fn parse_bench_config(s: String) -> Result<BenchmarkConfig> {
-    let config: BenchmarkConfig = serde_yaml::from_str(&s)
+pub fn parse_bench_config(s: &str) -> Result<BenchmarkConfig> {
+    let config: BenchmarkConfig = serde_yaml::from_str(s)
         .with_context(|| "Failed to parse YAML.")?;
     validate_config(&config)?;
 
@@ -250,10 +250,15 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
     let contents = std::fs::read_to_string(bench_config_path)
         .with_context(|| format!("Failed to read benchmark config file: {bench_config_path:?}"))?;
 
-    let mut config =  parse_bench_config(contents)
+    let mut config =  parse_bench_config(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {bench_config_path:?}"))?;
 
     config.path = bench_config_path.to_path_buf();
+
+    expand_paths(
+        &mut [&mut config.global.scratch, &mut config.global.tmp_data_dir],
+        config_dir,
+    )?;
 
     // Expand paths in global config
     let source_str = config.global.source.to_string_lossy().to_string();
@@ -262,10 +267,12 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
         || source_str.starts_with("git:")
         || source_str.starts_with("git@");
 
-    if is_url {
+
+    if !is_url {
         // Only expand non-URL paths
         expand_paths(&mut [&mut config.global.source], config_dir)?;
     }
+
 
     debug!(
         "Loaded benchmark configuration from {:?}",

@@ -136,7 +136,7 @@ async fn main() -> Result<()> {
             .expect("Error setting default rustls provider.");
         match command  {
             NetworkedCommands::Client { out_dir, url, crt } => {
-                benchkit::networked::client::client_loop(url.clone(), crt.clone(), app.clone(), out_dir.clone());
+                benchkit::networked::client::client_loop(&url, crt.clone(), app.clone(), out_dir.clone());
             }
             NetworkedCommands::Announce { nkey, url, crt } => {
                 // Todo: maybe allow the user to pass aws config arguments?

@@ -34,10 +34,11 @@ pub async fn listen_for_jobs(
 /// Set up an async thread that listens for new jobs to be announced and adds
 /// them to the queue and a synchronous thread that waits for and executes
 /// jobs in the queue.
-pub fn client_loop(nats_url: String, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
+pub fn client_loop(nats_url: &str, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
+    let nats_url = nats_url.to_string();
     // Spawn the listener in a dedicated thread with its own tokio runtime
     let listener_thread = thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new()
@@ -72,7 +73,7 @@ pub fn client_loop(nats_url: String, nats_crt: Option<PathBuf>, app_config: AppC
 
 fn process_job(job: &async_nats::Message, app: AppConfig, out_dir: PathBuf) {
     // Convert Bytes to String
-    let bench = parse_bench_config(String::from_utf8(job.payload.to_vec()).unwrap()).unwrap();
+    let bench = parse_bench_config(&String::from_utf8(job.payload.to_vec()).unwrap()).unwrap();
 
     // Get a hash of the job payload and system time for a unique filename.
     let mut hasher = DefaultHasher::new();
