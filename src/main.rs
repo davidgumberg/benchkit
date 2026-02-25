@@ -2,7 +2,7 @@
 use anyhow::Result;
 use benchkit::{
     benchmarks,
-    config::{load_app_config, parse_bench_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
+    config::{load_app_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
     system::SystemChecker,
 };
 
@@ -78,16 +78,12 @@ enum NetworkedCommands {
         url: String,
 
         /// Certificate of the nats server the benchmark client will subscribe to.
-        /// Since clients will execute arbitrary code as instructed by a publisher
-        /// on the NATS server, we authenticate the server.
+        /// Only needed if using a self-signed certificate.
         #[arg(short, long)]
         crt: Option<PathBuf>,
     },
     /// Start a client that listens for benchmark jobs.
     Announce {
-        #[arg(short, long, required = true)]
-        benchmark_file: PathBuf,
-
         /// Path to a NATS NKey (seed) file used for client authentication.
         #[arg(short = 'k', long, required = true)]
         nkey: PathBuf,
@@ -98,6 +94,7 @@ enum NetworkedCommands {
         url: String,
 
         /// Certificate of the nats server the benchmark client will announce to.
+        /// Only needed if using a self-signed certificate.
         #[arg(short, long)]
         crt: Option<PathBuf>,
     },
@@ -113,7 +110,8 @@ enum SystemCommands {
     Reset,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
 
@@ -134,22 +132,17 @@ fn main() -> Result<()> {
     let app: AppConfig = load_app_config(&cli.app_config)?;
 
     if let Commands::Networked { command } = &cli.command {
+        rustls::crypto::aws_lc_rs::default_provider().install_default()
+            .expect("Error setting default rustls provider.");
         match command  {
             NetworkedCommands::Client { out_dir, url, crt } => {
                 benchkit::networked::client::client_loop(url.clone(), crt.clone(), app.clone(), out_dir.clone());
             }
-            NetworkedCommands::Announce { benchmark_file, nkey, url, crt } => {
-                let contents = std::fs::read_to_string(benchmark_file)
-                    .expect("Failed to read benchmark file contents.");
+            NetworkedCommands::Announce { nkey, url, crt } => {
+                // Todo: maybe allow the user to pass aws config arguments?
+                let aws_cfg = aws_config::load_from_env().await;
 
-                // String->BenchConfig->String to validate the benchmark.yml file.
-                let bench_config = parse_bench_config(contents)
-                    .expect("Failed to parse benchmark file contents.");
-                let bench_config_str = serde_yaml::to_string(&bench_config)
-                    .expect("Serialization of benchmark file failed.");
-
-                benchkit::networked::announce::announce_job(bench_config_str, nkey, url, crt.as_ref())
-                    .expect("Failed to announce job.");
+                benchkit::networked::announce::announce_job_loop(nkey, url, &aws_cfg, crt.as_ref()).await.expect("Error starting announce loop.");
             }
         }
     }
