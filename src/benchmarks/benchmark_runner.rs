@@ -499,13 +499,15 @@ impl BenchmarkRunner {
     // Export methods - delegating to the ResultExporter
 
     pub fn export_json(result: &BenchmarkResult, path: &impl AsRef<std::path::Path>) -> Result<()> {
-        ResultExporter::export_json(result, path.as_ref())
+        ResultExporter::to_file(path.as_ref(), |w|
+            ResultExporter::write_json(result, w))
     }
 
     pub fn export_json_multiple(
         results: &[BenchmarkResult],
         path: &impl AsRef<std::path::Path>,
     ) -> Result<()> {
-        ResultExporter::export_json_multiple(results, path.as_ref())
+        ResultExporter::to_file(path.as_ref(), |w|
+            ResultExporter::write_json_multiple(results, w))
     }
 }
