@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use log::{debug, info};
 use std::path::PathBuf;
 
-use crate::benchmarks::Builder;
+use crate::benchmarks::{BenchmarkResult, Builder};
 use crate::benchmarks::hook_runner::HookArgs;
 use crate::benchmarks::parameters::ParameterList;
 use crate::benchmarks::utils::check_binaries_exist;
@@ -61,7 +61,7 @@ impl Runner {
     }
 
     /// Run all or a specific benchmark
-    pub fn run(&self, name: Option<&str>, build: bool) -> Result<()> {
+    pub fn run(&self, name: Option<&str>, build: bool) -> Result<Vec<BenchmarkResult>> {
         if build {
             let mut builder = Builder::new(self.global_config.clone())?;
             builder.build()?;
@@ -104,15 +104,16 @@ impl Runner {
                 .collect(),
         };
 
+        let mut results: Vec<BenchmarkResult> = Vec::new();
         for (index, bench) in benchmarks {
-            self.run_benchmark(index, bench)?;
+            results.extend(self.run_benchmark(index, bench)?);
         }
 
-        Ok(())
+        Ok(results)
     }
 
     /// Run a specific benchmark
-    fn run_benchmark(&self, index: usize, bench: &SingleConfig) -> Result<()> {
+    fn run_benchmark(&self, index: usize, bench: &SingleConfig) -> Result<Vec<BenchmarkResult>> {
         info!("Running benchmark: {:?}", bench.name);
 
         // Get merged options for this benchmark
@@ -193,6 +194,6 @@ impl Runner {
         )?;
 
         info!("Benchmark {} completed successfully", bench.name);
-        Ok(())
+        Ok(results)
     }
 }
