@@ -21,6 +21,7 @@ shellexpand = "3.1.0"
 sysinfo = "0.33.1"
 tempfile = "3.10.1"
 url = "2.5.4"
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [dev-dependencies]

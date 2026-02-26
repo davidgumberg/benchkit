@@ -132,17 +132,12 @@ async fn main() -> Result<()> {
     let app: AppConfig = load_app_config(&cli.app_config)?;
 
     if let Commands::Networked { command } = &cli.command {
-        rustls::crypto::aws_lc_rs::default_provider().install_default()
-            .expect("Error setting default rustls provider.");
         match command  {
             NetworkedCommands::Client { out_dir, url, crt } => {
                 benchkit::networked::client::client_loop(&url, crt.clone(), app.clone(), out_dir.clone());
             }
             NetworkedCommands::Announce { nkey, url, crt } => {
-                // Todo: maybe allow the user to pass aws config arguments?
-                let aws_cfg = aws_config::load_from_env().await;
-
-                benchkit::networked::announce::announce_job_loop(nkey, url, &aws_cfg, crt.as_ref()).await.expect("Error starting announce loop.");
+                benchkit::networked::announce::announce_job_loop(nkey, url, crt.as_ref()).await.expect("Error starting announce loop.");
             }
         }
     }

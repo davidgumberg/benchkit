@@ -1,12 +1,12 @@
+use anyhow::{Context, Result};
 use futures::StreamExt;
 use tokio::sync::mpsc;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::thread;
-use std::time::SystemTime;
 
 use crate::benchmarks::Runner;
-use crate::config::{parse_bench_config, AppConfig, GlobalConfig};
+use crate::config::{AppConfig, GlobalConfig};
+use crate::networked::job::Job;
 use crate::networked::nats::create_nats_client;
 
 pub async fn listen_for_jobs(
@@ -71,52 +71,44 @@ pub fn client_loop(nats_url: &str, nats_crt: Option<PathBuf>, app_config: AppCon
     processor_thread.join().expect("Processor thread panicked");
 }
 
-fn process_job(job: &async_nats::Message, app: AppConfig, out_dir: PathBuf) {
-    // Convert Bytes to String
-    let bench = parse_bench_config(&String::from_utf8(job.payload.to_vec()).unwrap()).unwrap();
+fn process_job(job_msg: &async_nats::Message, app: AppConfig, out_dir: PathBuf) -> Result<()> {
+    let payload = String::from_utf8(job_msg.payload.to_vec())
+        .context("job payload is not valid UTF-8")?;
+    let job = Job::from_yaml(&payload)
+        .context("Error building job from message payload.")?;
+    // (&String::from_utf8(job_msg.payload.to_vec()).unwrap()).unwrap();
+    // Use UUID for unique output dir.
+    let out_dir = out_dir.join(job.id.to_string());
 
-    // Get a hash of the job payload and system time for a unique filename.
-    let mut hasher = DefaultHasher::new();
-    job.payload.hash(&mut hasher) ;
-    SystemTime::now().hash(&mut hasher);
-    let unique_filename = format!("{:x}", hasher.finish());
-    let out_dir = out_dir.join(unique_filename);
-
-    let config = GlobalConfig { app, bench };
+    let config = GlobalConfig { app, bench: job.bench };
     let runner = Runner::new(config, out_dir.clone())
         .expect("Failed to initialize job runner.");
     runner.run(None, true)
         .expect("Failed to execute job runner.");
 
+    // TODO: upload results here.
     println!("Completed job! Find Results in {}", out_dir.display());
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bytes::Bytes;
-    use std::env;
+    use tempfile::TempDir;
 
-    // --- 1. Test Network Error Propagation ---
-    // Ensures that if the NATS server is unreachable, the async function
-    // doesn't hang forever and correctly bubbles up the connection error.
     #[tokio::test]
     async fn test_listen_for_jobs_connection_error() {
         let (tx, _rx) = mpsc::channel(10);
         
-        // Using a definitively invalid/unroutable URL
         let result = listen_for_jobs("nats://255.255.255.255:9999", None, tx).await;
         
         assert!(result.is_err(), "Expected connection to fail and return an error");
     }
 
-    // --- 2. Test Payload Parsing Failure (Invalid UTF-8) ---
-    // The current code uses `.unwrap()` on String::from_utf8. 
-    // This test ensures we explicitly know it panics on bad byte streams 
-    // from the network, which kills the processor thread.
     #[test]
-    #[should_panic]
-    fn test_process_job_panics_on_invalid_utf8() {
+    fn test_process_job_panics_on_invalid_bytes() {
         let bad_payload = Bytes::from(vec![0, 159, 146, 150]); // Invalid UTF-8 sequence
         
         let msg = async_nats::Message {
@@ -129,14 +121,18 @@ mod tests {
             length: 4,
         };
 
-        let dummy_app = AppConfig::default(); // Assumes AppConfig implements Default or use a mock
-        let out_dir = env::temp_dir();
+        let dummy_app = AppConfig::default();
+        let out_dir = TempDir::new().unwrap();
 
-        process_job(&msg, dummy_app, out_dir);
+        let result = process_job(&msg, dummy_app, out_dir.path().to_path_buf());
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("UTF-8"),
+            "Expected UTF-8 error"
+        );
     }
 
     #[test]
-    #[should_panic]
     fn test_process_job_panics_on_invalid_job_data() {
         let msg = async_nats::Message {
             subject: "benchkit.jobs".into(),
@@ -148,9 +144,14 @@ mod tests {
             length: 19,
         };
 
-        let dummy_app = AppConfig::default(); // Assumes AppConfig implements Default
-        let out_dir = env::temp_dir();
+        let dummy_app = AppConfig::default();
+        let out_dir = TempDir::new().unwrap();
 
-        process_job(&msg, dummy_app, out_dir);
+        let result = process_job(&msg, dummy_app, out_dir.path().to_path_buf());
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("job"),
+            "Expected job parsing error"
+        );
     }
 }
