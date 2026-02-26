@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 pub const DEFAULT_P2P_PORT: u16 = 22000;
 
 /// Default port for Bitcoin Core RPC connections
-pub const DEFAULT_RPC_PORT: u16 = 22001;
+pub const DEFAULT_RPC_PORT: u16 = 22002; // skip 1 for the tor port.
 
 /// Check if a binary exists for a given commit
 pub fn binary_exists(bin_dir: &Path, commit: &str) -> bool {

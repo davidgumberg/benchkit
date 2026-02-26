@@ -8,7 +8,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::path_utils;
 
 /// Application configuration loaded from config.yml
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
     pub home_dir: PathBuf,

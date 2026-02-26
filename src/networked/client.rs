@@ -90,3 +90,67 @@ fn process_job(job: &async_nats::Message, app: AppConfig, out_dir: PathBuf) {
 
     println!("Completed job! Find Results in {}", out_dir.display());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use std::env;
+
+    // --- 1. Test Network Error Propagation ---
+    // Ensures that if the NATS server is unreachable, the async function
+    // doesn't hang forever and correctly bubbles up the connection error.
+    #[tokio::test]
+    async fn test_listen_for_jobs_connection_error() {
+        let (tx, _rx) = mpsc::channel(10);
+        
+        // Using a definitively invalid/unroutable URL
+        let result = listen_for_jobs("nats://255.255.255.255:9999", None, tx).await;
+        
+        assert!(result.is_err(), "Expected connection to fail and return an error");
+    }
+
+    // --- 2. Test Payload Parsing Failure (Invalid UTF-8) ---
+    // The current code uses `.unwrap()` on String::from_utf8. 
+    // This test ensures we explicitly know it panics on bad byte streams 
+    // from the network, which kills the processor thread.
+    #[test]
+    #[should_panic]
+    fn test_process_job_panics_on_invalid_utf8() {
+        let bad_payload = Bytes::from(vec![0, 159, 146, 150]); // Invalid UTF-8 sequence
+        
+        let msg = async_nats::Message {
+            subject: "benchkit.jobs".into(),
+            reply: None,
+            payload: bad_payload,
+            headers: None,
+            status: None,
+            description: None,
+            length: 4,
+        };
+
+        let dummy_app = AppConfig::default(); // Assumes AppConfig implements Default or use a mock
+        let out_dir = env::temp_dir();
+
+        process_job(&msg, dummy_app, out_dir);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_process_job_panics_on_invalid_job_data() {
+        let msg = async_nats::Message {
+            subject: "benchkit.jobs".into(),
+            reply: None,
+            payload: Bytes::from(r#""malformed"; "yaml""#),
+            headers: None,
+            status: None,
+            description: None,
+            length: 19,
+        };
+
+        let dummy_app = AppConfig::default(); // Assumes AppConfig implements Default
+        let out_dir = env::temp_dir();
+
+        process_job(&msg, dummy_app, out_dir);
+    }
+}
