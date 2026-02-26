@@ -508,6 +508,6 @@ impl BenchmarkRunner {
         path: &impl AsRef<std::path::Path>,
     ) -> Result<()> {
         ResultExporter::to_file(path.as_ref(), |w|
-            ResultExporter::write_json_multiple(results, w))
+            ResultExporter::write_json_multiple(results, w, None))
     }
 }

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use uuid::Uuid;
 use std::path::Path;
 use std::io::Write;
 
@@ -18,7 +19,7 @@ impl ResultExporter {
     }
 
     /// Export multiple benchmark results to JSON, including a master summary
-    pub fn write_json_multiple(results: &[BenchmarkResult], writer: &mut dyn Write) -> Result<()> {
+    pub fn write_json_multiple(results: &[BenchmarkResult], writer: &mut dyn Write, job_id: Option<&Uuid>) -> Result<()> {
         // Calculate master summary if there are multiple results
         let master_summary = if results.len() > 1 {
             ResultAnalyzer::calculate_master_summary(results)
@@ -32,11 +33,14 @@ impl ResultExporter {
             results: &'a [BenchmarkResult],
             #[serde(skip_serializing_if = "Option::is_none")]
             master_summary: Option<MasterSummary>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            job_id: Option<&'a Uuid>,
         }
 
         let export_data = ExportData {
             results,
             master_summary,
+            job_id,
         };
 
         let json_data = serde_json::to_string_pretty(&export_data)
