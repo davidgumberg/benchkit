@@ -69,7 +69,7 @@ impl Builder {
                 // For remote repos, create a repository manager
                 info!("Using remote Git repository: {url}");
                 // Use the scratch directory directly to avoid duplicate "repos" in path
-                let scratch_dir = config.bench.global.scratch.clone();
+                let scratch_dir = config.app.scratch_dir.clone();
                 // Important: pass the raw URL string, not the processed path
                 let repo_manager = RepositoryManager::builder(url, &scratch_dir).build()?;
 
@@ -189,12 +189,7 @@ impl Builder {
 
     fn run_build(&self, source_dir: &PathBuf, commit_hash: &str) -> Result<()> {
         // Make a build-dir using the commit-hash
-        let dir = self
-            .config
-            .bench
-            .global
-            .scratch
-            .join(format!("build-{commit_hash}"));
+        let dir = self.get_build_path(commit_hash);
 
         info!("Making build dir: {dir:?}");
         path_utils::ensure_directory(&dir)?;
@@ -234,12 +229,7 @@ impl Builder {
     }
 
     fn copy_binary(&self, commit_hash: &str) -> Result<()> {
-        let dir = self
-            .config
-            .bench
-            .global
-            .scratch
-            .join(format!("build-{commit_hash}"));
+        let dir = self.get_build_path(commit_hash);
 
         let src_path = dir.clone().join("bin/bitcoind");
         let dest_path = self
@@ -275,5 +265,13 @@ impl Builder {
             anyhow::bail!("Failed to restore git state");
         }
         Ok(())
+    }
+
+    fn get_build_path(&self, commit_hash: &str) -> PathBuf {
+        self.config
+            .app
+            .scratch_dir
+            .join("build")
+            .join(format!("{commit_hash}"))
     }
 }

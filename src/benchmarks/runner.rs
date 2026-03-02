@@ -159,7 +159,7 @@ impl Runner {
                 &self.global_config.app.bin_dir,
                 "{commit}",
                 &bench.network,
-                &self.global_config.bench.global.tmp_data_dir,
+                &self.global_config.app.tmp_datadir.path(),
                 &bench.connect.clone().unwrap_or_default(),
                 cmd,
             ),
@@ -178,7 +178,7 @@ impl Runner {
             connect_address: bench.connect.clone().unwrap_or_default(),
             network: bench.network.clone(),
             out_dir: self.out_dir.clone(),
-            tmp_data_dir: self.global_config.bench.global.tmp_data_dir.clone(),
+            tmp_data_dir: self.global_config.app.tmp_datadir.path().to_path_buf(),
             iteration: 0,
             commit: "{commit}".to_string(), // Will be replaced by parameter substitution
             params_dir: "default".to_string(), // Will be updated during parameter matrix expansion

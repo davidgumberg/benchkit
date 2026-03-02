@@ -3,17 +3,115 @@ use log::debug;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use tempfile::TempDir;
 
 use crate::path_utils;
 
-/// Application configuration loaded from config.yml
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+/// Enum to hold user-selected tmpdir vs our own.
+#[derive(Debug, Clone)]
+pub enum TmpDataDir {
+    User(PathBuf),
+    Temporary(Arc<TempDir>),
+}
+
+impl TmpDataDir {
+    pub fn path(&self) -> &std::path::Path {
+        match self {
+            Self::User(p) => p,
+            Self::Temporary(t) => t.path(),
+        }
+    }
+}
+
+/// Just for making the compiler happy.
+impl Default for TmpDataDir {
+    fn default() -> Self {
+        Self::User(PathBuf::new())
+    }
+}
+
+impl Serialize for TmpDataDir {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.path().to_string_lossy())
+    }
+}
+
+/// For deserializing Application configuration loaded from config.yml
+/// and finalizing into an AppConfig.
+#[derive(Debug, Deserialize)]
+pub struct RawAppConfig {
+    /// The only mandatory field in AppConfig serialization,
+    /// specifies the parent directory for binaries and build
+    /// artifacts.
+    pub scratch_dir: PathBuf,
+    /// Optional in serialization, under scratch_dir by default.
+    pub bin_dir: Option<PathBuf>,
+    /// Optional in serialization, a tmpdir by default.
+    pub tmp_datadir: Option<PathBuf>,
+}
+
+impl RawAppConfig {
+    /// Convert a serialization-only `RawAppConfig` into a real one, avoid
+    /// business logic here, just path expansion / parsing stuff, everything
+    /// else goes in AppConfig::new()
+    pub fn finalize(self, path: &PathBuf) -> Result<AppConfig> {
+        let config_dir = path
+            .parent()
+            .context("Failed to get app config directory")?;
+
+        let scratch_dir = expand_path(&self.scratch_dir, config_dir)?;
+
+        // Expand the paths (only if they were passed by the user), otherwise
+        let bin_dir = self.bin_dir
+            .map(|p| expand_path(&p, config_dir))
+            .transpose()?;
+
+        let tmp_datadir = self.tmp_datadir
+            .map(|p| expand_path(&p, config_dir))
+            .transpose()?;
+
+        AppConfig::new(
+            path.to_path_buf(),
+            scratch_dir,
+            bin_dir,
+            tmp_datadir
+        )
+    }
+}
+
+#[derive(Debug, Default, Serialize, Clone)]
 pub struct AppConfig {
-    pub bin_dir: PathBuf,
     #[serde(default)]
     pub path: PathBuf,
+    pub scratch_dir: PathBuf,
+    pub bin_dir: PathBuf,
+    pub tmp_datadir: TmpDataDir,
+}
 
+impl AppConfig {
+    pub fn new(path: PathBuf, scratch_dir: PathBuf, bin_dir: Option<PathBuf>, tmp_datadir: Option<PathBuf>) -> Result<Self> {
+        let bin_dir = bin_dir.unwrap_or_else(|| scratch_dir.join("binaries"));
+        let tmp_datadir = match tmp_datadir {
+            Some(p) => TmpDataDir::User(p),
+            None => {
+                let t = tempfile::Builder::new()
+                    .prefix("benchkit-")
+                    .tempdir()
+                    .context("Failed to create RAII temporary data directory")?;
+                TmpDataDir::Temporary(Arc::new(t))
+            }
+        };
+        Ok(Self {
+            path,
+            scratch_dir,
+            bin_dir,
+            tmp_datadir,
+        })
+    }
 }
 
 /// Configuration for benchmark runs
@@ -151,20 +249,7 @@ pub struct BenchmarkGlobalConfig {
     pub runner_cores: Option<String>,
     pub cmake_build_args: Option<Vec<String>>,
     pub source: PathBuf,
-    #[serde(default = "default_tmp_dir")]
-    pub scratch: PathBuf,
-    #[serde(default = "default_tmp_dir")]
-    pub tmp_data_dir: PathBuf,
     pub commits: Vec<String>,
-}
-
-fn default_tmp_dir() -> PathBuf {
-    let tmp_dir = tempfile::Builder::new()
-        .prefix("benchkit-scratch")
-        .tempdir()
-        .expect("Error creating temporary scratch path.");
-    // TODO: actually use the tempdir type properly instead of keeping them.
-    tmp_dir.keep().to_path_buf()
 }
 
 /// Configuration for a single benchmark
@@ -199,20 +284,14 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
         anyhow::bail!("App config file not found: {:?}", app_config_path);
     }
 
-    let config_dir = app_config_path
-        .parent()
-        .context("Failed to get app config directory")?;
 
     let contents = std::fs::read_to_string(app_config_path)
         .with_context(|| format!("Failed to read app config file: {app_config_path:?}"))?;
 
-    let mut config: AppConfig = serde_yaml::from_str(&contents)
+    let raw_config: RawAppConfig = serde_yaml::from_str(&contents)
         .with_context(|| format!("Failed to parse YAML from file: {app_config_path:?}"))?;
 
-    config.path = app_config_path.to_path_buf();
-
-    // Expand any relative paths to absolute
-    expand_paths(&mut [&mut config.bin_dir], config_dir)?;
+    let config = raw_config.finalize(app_config_path)?;
 
     for dir in [&config.bin_dir] {
         if !dir.exists() {
@@ -255,11 +334,6 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
 
     config.path = bench_config_path.to_path_buf();
 
-    expand_paths(
-        &mut [&mut config.global.scratch, &mut config.global.tmp_data_dir],
-        config_dir,
-    )?;
-
     // Expand paths in global config
     let source_str = config.global.source.to_string_lossy().to_string();
     let is_url = source_str.starts_with("http:")
@@ -270,7 +344,7 @@ pub fn load_bench_config(bench_config_path: &PathBuf) -> Result<BenchmarkConfig>
 
     if !is_url {
         // Only expand non-URL paths
-        expand_paths(&mut [&mut config.global.source], config_dir)?;
+        expand_path(&mut config.global.source, config_dir)?;
     }
 
 
@@ -301,8 +375,8 @@ pub fn get_merged_options(
     Ok(options)
 }
 
-fn expand_paths(paths: &mut [&mut PathBuf], config_dir: &std::path::Path) -> Result<()> {
-    path_utils::process_paths(paths, config_dir, true)
+fn expand_path(path: &PathBuf, config_dir: &std::path::Path) -> Result<PathBuf> {
+    path_utils::process_path(path, config_dir, true)
 }
 
 fn validate_config(config: &BenchmarkConfig) -> Result<()> {
@@ -421,6 +495,7 @@ mod tests {
         let config_path = tempdir.path().join("config.yml");
 
         let config_content = r#"
+        scratch_dir: ./scratch
         bin_dir: ./bin
         "#;
 

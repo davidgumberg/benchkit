@@ -50,16 +50,13 @@ pub fn resolve_path(path: &Path, config_dir: &Path, create_dirs: bool) -> Result
 }
 
 /// Process multiple paths at once, resolving them all relative to a config directory
-pub fn process_paths(
-    paths: &mut [&mut PathBuf],
+pub fn process_path(
+    path: impl AsRef<Path>,
     config_dir: &Path,
     create_dirs: bool,
-) -> Result<()> {
-    for path in paths.iter_mut() {
-        **path = expand_path_buf(path);
-        **path = resolve_path(path, config_dir, create_dirs)?;
-    }
-    Ok(())
+) -> Result<PathBuf> {
+    let expanded = expand_path_buf(path.as_ref());
+    resolve_path(&expanded, config_dir, create_dirs)
 }
 
 /// Make a clean output directory, ensuring it exists and is empty
@@ -178,18 +175,22 @@ mod tests {
     }
 
     #[test]
-    fn test_process_paths() {
+    fn test_process_path() {
         let tempdir = tempdir().unwrap();
         let config_dir = tempdir.path();
-        let mut path1 = PathBuf::from("path1");
-        let mut path2 = PathBuf::from("path2");
-        let mut path3 = PathBuf::from("nested/path3");
+        let paths = [
+            PathBuf::from("path1"),
+            PathBuf::from("path2"),
+            PathBuf::from("nested/path3"),
+        ];
+        let mut processed_paths: Vec<PathBuf> = Vec::new();
 
-        let mut paths = vec![&mut path1, &mut path2, &mut path3];
-        process_paths(&mut paths, config_dir, true).unwrap();
+        for path in &paths {
+            processed_paths.push(process_path(path, config_dir, true).unwrap());
+        }
 
         // Verify each path is now absolute and directories exist
-        for path in &paths {
+        for path in &processed_paths {
             assert!(path.is_absolute());
             assert!(path.exists());
             assert!(path.is_dir());

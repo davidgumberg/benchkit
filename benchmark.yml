@@ -34,14 +34,8 @@ global:
   source: $HOME/src/core/bitcoin
   # source: https://github.com/bitcoin/bitcoin
  
-  # The directory binaries will be built into
-  scratch: $HOME/.local/state/benchkit/scratch
-
   # Commits to build binaries from (required).
   commits: ["e221b252465", "8f73d952214"]
-
-  # A temporary datadir for Bitcoin Core to use
-  tmp_data_dir: /tmp/benchkit
 
 # Local benchmark config.
 benchmarks:

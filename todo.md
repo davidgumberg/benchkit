@@ -93,9 +93,8 @@
 ### benchkit.yml becomes more net-aware
 - [~] Scratch and tmpdir parameters are optional
 - [ ] Cache git and builds when using network repo path
-- [ ] 
-
-
+- [ ] Scratch and tmp dirs are the business of app config rather than bench
+      config.
 
 #### Future
 - [ ] Migrate pub/sub to rails action cable, no more nats.

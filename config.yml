@@ -1,3 +1,6 @@
 ---
-# The directory intermediate built binaries will be saved to.
+# The directory where build artifacts and binaries will be placed.
+scratch_dir: $HOME/.local/state/benchkit/scratch
+# Optional: The directory intermediate built binaries will be saved to.
+# Inside of the scratch folder by default.
 bin_dir: $HOME/.local/state/benchkit/binaries
