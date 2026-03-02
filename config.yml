@@ -1,7 +1,3 @@
 ---
-# Benchkit home directory
-home_dir: $HOME/.local/state/benchkit
-
 # The directory intermediate built binaries will be saved to.
 bin_dir: $HOME/.local/state/benchkit/binaries
-

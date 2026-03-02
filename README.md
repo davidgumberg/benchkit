@@ -97,17 +97,12 @@ benchkit system tune
 benchkit system reset
 ```
 
-
-
 ## Configuration Files
 
 ### Application Configuration (config.yml)
 
 ```yaml
-home_dir: $HOME/.local/state/benchkit
 bin_dir: $HOME/.local/state/benchkit/binaries
-patch_dir: $HOME/.local/state/benchkit/patches
-snapshot_dir: $HOME/.local/state/benchkit/snapshots
 ```
 
 ### Benchmark Configuration (benchmark.yml)

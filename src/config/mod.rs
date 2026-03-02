@@ -11,9 +11,9 @@ use crate::path_utils;
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
     pub bin_dir: PathBuf,
-    pub home_dir: PathBuf,
     #[serde(default)]
     pub path: PathBuf,
+
 }
 
 /// Configuration for benchmark runs
@@ -212,7 +212,7 @@ pub fn load_app_config(app_config_path: &PathBuf) -> Result<AppConfig> {
     config.path = app_config_path.to_path_buf();
 
     // Expand any relative paths to absolute
-    expand_paths(&mut [&mut config.bin_dir, &mut config.home_dir], config_dir)?;
+    expand_paths(&mut [&mut config.bin_dir], config_dir)?;
 
     for dir in [&config.bin_dir] {
         if !dir.exists() {
@@ -422,7 +422,6 @@ mod tests {
 
         let config_content = r#"
         bin_dir: ./bin
-        home_dir: ./home
         "#;
 
         let mut file = fs::File::create(&config_path).unwrap();
@@ -431,7 +430,6 @@ mod tests {
         let config = load_app_config(&config_path).unwrap();
 
         assert!(config.bin_dir.is_absolute());
-        assert!(config.home_dir.is_absolute());
         assert_eq!(config.path, config_path);
     }
 }

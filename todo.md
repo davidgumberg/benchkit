@@ -70,15 +70,34 @@
     - [ ] Should we include more than this?
 
 
-## Networking
+## Networking project
 
 ### Announcing 
 - [x] Announcing jobs
-- [x] Listening for jobs
+- [x] Servers need to auth publishers.
+- [x] Pub/Sub via NATS
+- [ ] Uploading created jobs to rails server.
 
-- [ ] Authentication - RCE right now for anyone listening :)
-  - [ ] Clients should auth servers
-    - [ ] Do this via TLS root certificate.
-  - [ ] Servers need to auth publishers.
+### Client
+- [x] Listening for jobs
+- [x] Executing jobs
+- [x] Clients auth servers
+  - [x] Do this via TLS root certificate.
+- [ ] Uploading results to rails server.
+
+### General changes
+- [x] Delete assumutxo patching
+- [ ] Maybe delete cpu affinity stuff?
+
+
+### benchkit.yml becomes more net-aware
+- [~] Scratch and tmpdir parameters are optional
+- [ ] Cache git and builds when using network repo path
 - [ ] 
--
+
+
+
+#### Future
+- [ ] Migrate pub/sub to rails action cable, no more nats.
+    - [
+
