@@ -8,6 +8,14 @@ use tempfile::TempDir;
 
 use crate::path_utils;
 
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct NetConfig {
+    /// Optional NATS nkey for authentication.
+    pub nkey: Option<String>,
+    /// Optional path to a TLS certificate.
+    pub certificate: Option<PathBuf>,
+}
+
 /// Enum to hold user-selected tmpdir vs our own.
 #[derive(Debug, Clone)]
 pub enum TmpDataDir {
@@ -47,6 +55,7 @@ pub struct RawAppConfig {
     pub tmp_datadir: Option<PathBuf>,
     /// number of cores to use in building.
     pub build_cores: Option<usize>,
+    pub net: Option<NetConfig>,
 }
 
 impl RawAppConfig {
@@ -69,12 +78,23 @@ impl RawAppConfig {
             .map(|p| expand_path(&p, config_dir))
             .transpose()?;
 
+        let net = match self.net {
+            Some(mut net_cfg) => {
+                if let Some(cert_path) = net_cfg.certificate {
+                    net_cfg.certificate = Some(expand_path(&cert_path, config_dir)?);
+                }
+                Some(net_cfg)
+            }
+            None => None,
+        };
+
         AppConfig::new(
             path.to_path_buf(),
             scratch_dir,
             bin_dir,
             tmp_datadir,
             self.build_cores,
+            net,
         )
     }
 }
@@ -87,10 +107,11 @@ pub struct AppConfig {
     pub bin_dir: PathBuf,
     pub tmp_datadir: TmpDataDir,
     pub build_cores: Option<usize>,
+    pub net: Option<NetConfig>,
 }
 
 impl AppConfig {
-    pub fn new(path: PathBuf, scratch_dir: PathBuf, bin_dir: Option<PathBuf>, tmp_datadir: Option<PathBuf>, build_cores: Option<usize>) -> Result<Self> {
+    pub fn new(path: PathBuf, scratch_dir: PathBuf, bin_dir: Option<PathBuf>, tmp_datadir: Option<PathBuf>, build_cores: Option<usize>, net: Option<NetConfig>) -> Result<Self> {
         let bin_dir = bin_dir.unwrap_or_else(|| scratch_dir.join("binaries"));
         let tmp_datadir = match tmp_datadir {
             Some(p) => TmpDataDir::User(p),
@@ -109,6 +130,7 @@ impl AppConfig {
             bin_dir,
             tmp_datadir,
             build_cores,
+            net
         })
     }
 }
@@ -120,6 +142,7 @@ impl Default for AppConfig {
         let bin_dir = PathBuf::default();
         let tmp_datadir = TmpDataDir::User(PathBuf::default());
         let build_cores = Option::default();
+        let net = Option::default();
 
         Self {
             path,
@@ -127,6 +150,7 @@ impl Default for AppConfig {
             bin_dir,
             tmp_datadir,
             build_cores,
+            net
         }
     }
 }

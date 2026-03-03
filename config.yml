@@ -3,7 +3,17 @@
 scratch_dir: $HOME/.local/state/benchkit/scratch
 # Optional: The directory intermediate built binaries will be saved to.
 # Inside of the scratch folder by default.
-bin_dir: $HOME/.local/state/benchkit/binaries
+# bin_dir: $HOME/.local/state/benchkit/binaries
+
+# The directory where temporary datadirs will be placed, benchkit will
+# clean these up at the end of running if and only if no datadir is 
+# specified.
+# tmp_datadir: /tmp/temporary_datadir
 
 # Number of cores to use when building
 build_cores: 2
+
+# Optional settings for configuring benchkit running in networked contexts.
+net:
+  nkey: nk.key
+  certificate: ca.crt

@@ -1,5 +1,5 @@
 #![warn(unused_extern_crates)]
-use anyhow::Result;
+use anyhow::{Context, Result};
 use benchkit::{
     benchmarks,
     config::{load_app_config, load_bench_config, AppConfig, BenchmarkConfig, GlobalConfig},
@@ -85,11 +85,10 @@ enum NetworkedCommands {
     /// Start a client that listens for benchmark jobs.
     Announce {
         /// Path to a NATS NKey (seed) file used for client authentication.
-        #[arg(short = 'k', long, required = true)]
-        nkey: PathBuf,
+        #[arg(short = 'k', long, required = false)]
+        nkey: Option<PathBuf>,
 
         /// URL of the nats server the benchmark orchestrator will announce to.
-        #[arg(short, long, required = true)]
         #[arg(short, long, required = true)]
         url: String,
 
@@ -134,10 +133,21 @@ async fn main() -> Result<()> {
     if let Commands::Networked { command } = &cli.command {
         match command  {
             NetworkedCommands::Client { out_dir, url, crt } => {
-                benchkit::networked::client::client_loop(&url, crt.clone(), app.clone(), out_dir.clone());
+                let resolved_crt = crt
+                    .clone()
+                    .or_else(|| app.net.as_ref().and_then(|n| n.certificate.clone()));
+                benchkit::networked::client::client_loop(&url, resolved_crt, app.clone(), out_dir.clone());
             }
             NetworkedCommands::Announce { nkey, url, crt } => {
-                benchkit::networked::announce::announce_job_loop(nkey, url, crt.as_ref()).await.expect("Error starting announce loop.");
+                let resolved_nkey = nkey
+                    .clone()
+                    .or_else(|| app.net.as_ref().and_then(|n| n.nkey.as_ref().map(PathBuf::from)))
+                    .context("nkey is required: provide it via --nkey or in the --config file.")?;
+
+                let resolved_crt = crt
+                    .clone()
+                    .or_else(|| app.net.as_ref().and_then(|n| n.certificate.clone()));
+                benchkit::networked::announce::announce_job_loop(&resolved_nkey, url, resolved_crt.as_ref()).await.expect("Error starting announce loop.");
             }
         }
     }
