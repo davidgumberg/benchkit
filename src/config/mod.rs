@@ -1,3 +1,5 @@
+mod net;
+
 use anyhow::{Context, Result};
 use log::debug;
 use regex::Regex;
@@ -8,13 +10,7 @@ use tempfile::TempDir;
 
 use crate::path_utils;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-pub struct NetConfig {
-    /// Optional NATS nkey for authentication.
-    pub nkey: Option<String>,
-    /// Optional path to a TLS certificate.
-    pub certificate: Option<PathBuf>,
-}
+pub use net::NetConfig;
 
 /// Enum to hold user-selected tmpdir vs our own.
 #[derive(Debug, Clone)]
