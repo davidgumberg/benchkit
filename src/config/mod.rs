@@ -24,13 +24,6 @@ impl TmpDataDir {
     }
 }
 
-/// Just for making the compiler happy.
-impl Default for TmpDataDir {
-    fn default() -> Self {
-        Self::User(PathBuf::new())
-    }
-}
-
 impl Serialize for TmpDataDir {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -83,7 +76,7 @@ impl RawAppConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 pub struct AppConfig {
     #[serde(default)]
     pub path: PathBuf,
@@ -111,6 +104,22 @@ impl AppConfig {
             bin_dir,
             tmp_datadir,
         })
+    }
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        let path = PathBuf::default();
+        let scratch_dir = PathBuf::default();
+        let bin_dir = PathBuf::default();
+        let tmp_datadir = TmpDataDir::User(PathBuf::default());
+
+        Self {
+            path,
+            scratch_dir,
+            bin_dir,
+            tmp_datadir,
+        }
     }
 }
 
