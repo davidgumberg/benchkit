@@ -11,7 +11,7 @@ scratch_dir: $HOME/.local/state/benchkit/scratch
 # tmp_datadir: /tmp/temporary_datadir
 
 # Number of cores to use when building
-build_cores: 2
+build_cores: 5
 
 # Optional settings for configuring benchkit running in networked contexts.
 net:

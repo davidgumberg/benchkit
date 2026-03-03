@@ -83,9 +83,23 @@ fn process_job(job_msg: &async_nats::Message, app: AppConfig, out_dir: PathBuf) 
     let config = GlobalConfig { app, bench: job.bench };
     let runner = Runner::new(config, out_dir.clone())
         .expect("Failed to initialize job runner.");
-    runner.run(None, true)
+    let results = runner.run(None, true)
         .expect("Failed to execute job runner.");
 
+    for result in results {
+        for run in result.runs {
+            if run.exit_code != 0 {
+                println!("Run {} of command {} failed with exit code: {}",
+                    run.iteration,
+                    result.command,
+                    run.exit_code
+                );
+                // TODO: let the server know that something went wrong so someone
+                // can come and fix it.
+                return Ok(())
+            }
+        }
+    }
     // TODO: upload results here.
     println!("Completed job! Find Results in {}", out_dir.display());
 

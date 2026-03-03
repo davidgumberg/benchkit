@@ -86,15 +86,19 @@
 - [ ] Uploading results to rails server.
 
 ### General changes
+- [x] Build and run, one command.
+    - [ ] Build everything first, run the jobs later?
 - [x] Delete assumutxo patching
 - [ ] Maybe delete cpu affinity stuff?
 
 
 ### benchkit.yml becomes more net-aware
-- [~] Scratch and tmpdir parameters are optional
-- [ ] Cache git and builds when using network repo path
-- [ ] Scratch and tmp dirs are the business of app config rather than bench
+- [x] Cache git and builds when using network repo path
+    - [x] Turns out this was already the case but not working bc of separate
+          issue fixed by the below checkbox being solved.
+- [x] Scratch and tmp dirs are the business of app config rather than bench
       config.
+- [ ]
 
 #### Future
 - [ ] Migrate pub/sub to rails action cable, no more nats.
