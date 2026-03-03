@@ -45,6 +45,8 @@ pub struct RawAppConfig {
     pub bin_dir: Option<PathBuf>,
     /// Optional in serialization, a tmpdir by default.
     pub tmp_datadir: Option<PathBuf>,
+    /// number of cores to use in building.
+    pub build_cores: Option<usize>,
 }
 
 impl RawAppConfig {
@@ -71,7 +73,8 @@ impl RawAppConfig {
             path.to_path_buf(),
             scratch_dir,
             bin_dir,
-            tmp_datadir
+            tmp_datadir,
+            self.build_cores,
         )
     }
 }
@@ -83,10 +86,11 @@ pub struct AppConfig {
     pub scratch_dir: PathBuf,
     pub bin_dir: PathBuf,
     pub tmp_datadir: TmpDataDir,
+    pub build_cores: Option<usize>,
 }
 
 impl AppConfig {
-    pub fn new(path: PathBuf, scratch_dir: PathBuf, bin_dir: Option<PathBuf>, tmp_datadir: Option<PathBuf>) -> Result<Self> {
+    pub fn new(path: PathBuf, scratch_dir: PathBuf, bin_dir: Option<PathBuf>, tmp_datadir: Option<PathBuf>, build_cores: Option<usize>) -> Result<Self> {
         let bin_dir = bin_dir.unwrap_or_else(|| scratch_dir.join("binaries"));
         let tmp_datadir = match tmp_datadir {
             Some(p) => TmpDataDir::User(p),
@@ -98,11 +102,13 @@ impl AppConfig {
                 TmpDataDir::Temporary(Arc::new(t))
             }
         };
+
         Ok(Self {
             path,
             scratch_dir,
             bin_dir,
             tmp_datadir,
+            build_cores,
         })
     }
 }
@@ -113,12 +119,14 @@ impl Default for AppConfig {
         let scratch_dir = PathBuf::default();
         let bin_dir = PathBuf::default();
         let tmp_datadir = TmpDataDir::User(PathBuf::default());
+        let build_cores = Option::default();
 
         Self {
             path,
             scratch_dir,
             bin_dir,
             tmp_datadir,
+            build_cores,
         }
     }
 }

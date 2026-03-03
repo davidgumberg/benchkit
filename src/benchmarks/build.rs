@@ -218,7 +218,8 @@ impl Builder {
             .arg(&canonical_dir)
             .arg("--target")
             .arg("bitcoind")
-            .arg("--parallel");
+            .arg("--parallel")
+            .arg(self.config.app.build_cores.map(|c| c.to_string()).unwrap_or_default());
         let build_status = cmd
             .status()
             .with_context(|| format!("Failed to build bitcoind for commit {commit_hash}"))?;

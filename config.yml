@@ -4,3 +4,6 @@ scratch_dir: $HOME/.local/state/benchkit/scratch
 # Optional: The directory intermediate built binaries will be saved to.
 # Inside of the scratch folder by default.
 bin_dir: $HOME/.local/state/benchkit/binaries
+
+# Number of cores to use when building
+build_cores: 2
