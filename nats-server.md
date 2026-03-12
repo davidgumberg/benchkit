@@ -45,6 +45,8 @@ publish, and everyone else only gets subscribe permissions.
 
 ```bash
 cat <<EOF > nats.conf
+listen: 127.0.0.1:4222
+
 authorization {
     users =
     [
