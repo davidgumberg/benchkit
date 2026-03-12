@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct NetConfig {
+    /// Optional url for NATS server
+    pub nats_url: Option<String>,
     /// Optional NATS nkey for authentication.
     pub nkey: Option<String>,
     /// Optional path to a TLS certificate.
