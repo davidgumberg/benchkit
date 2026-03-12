@@ -9,4 +9,7 @@ pub struct NetConfig {
     pub nkey: Option<String>,
     /// Optional path to a TLS certificate.
     pub certificate: Option<PathBuf>,
+    
+    /// Optional url for rails server that receives uploaded results.
+    pub rails_url: Option<String>,
 }

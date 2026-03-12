@@ -35,6 +35,7 @@ pub async fn announce_job(
 pub async fn announce_job_loop(
     nkey_path: &PathBuf,
     nats_url: &str,
+    rails_url: &str,
     cert_path: Option<&PathBuf>,
 ) -> Result<()> {
     loop {

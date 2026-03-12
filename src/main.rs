@@ -77,6 +77,10 @@ enum NetworkedCommands {
         #[arg(short, long, required = false)]
         nats_url: Option<String>,
 
+        /// URL of the rails server the benchmark client will announce to.
+        #[arg(short, long, required = false)]
+        rails_url: Option<String>,
+
         /// Certificate of the nats server the benchmark client will subscribe to.
         /// Only needed if using a self-signed certificate.
         #[arg(short, long)]
@@ -91,6 +95,10 @@ enum NetworkedCommands {
         /// URL of the nats server the benchmark orchestrator will announce to.
         #[arg(short, long, required = false)]
         nats_url: Option<String>,
+
+        /// URL of the rails server the benchmark client will announce to.
+        #[arg(short, long, required = false)]
+        rails_url: Option<String>,
 
         /// Certificate of the nats server the benchmark client will announce to.
         /// Only needed if using a self-signed certificate.
@@ -132,7 +140,7 @@ async fn main() -> Result<()> {
 
     if let Commands::Networked { command } = &cli.command {
         match command  {
-            NetworkedCommands::Client { out_dir, nats_url, crt } => {
+            NetworkedCommands::Client { out_dir, nats_url, rails_url, crt } => {
                 let resolved_crt = crt
                     .clone()
                     .or_else(|| app.net.as_ref().and_then(|n| n.certificate.clone()));
@@ -143,9 +151,14 @@ async fn main() -> Result<()> {
                     .or_else(|| app.net.as_ref().and_then(|n| n.nats_url.clone()))
                     .context("nats_url is required: provide it via --nats-url or in the --config file.")?;
 
-                benchkit::networked::client::client_loop(&resolved_nats_url, resolved_crt, app.clone(), out_dir.clone());
+                let resolved_rails_url = rails_url
+                    .clone()
+                    .or_else(|| app.net.as_ref().and_then(|n| n.rails_url.clone()))
+                    .context("rails_url is required: provide it via --nats-url or in the --config file.")?;
+
+                benchkit::networked::client::client_loop(&resolved_nats_url, &resolved_rails_url, resolved_crt, app.clone(), out_dir.clone());
             }
-            NetworkedCommands::Announce { nkey, nats_url, crt } => {
+            NetworkedCommands::Announce { nkey, nats_url, rails_url, crt } => {
                 let resolved_nkey = nkey
                     .clone()
                     .or_else(|| app.net.as_ref().and_then(|n| n.nkey.as_ref().map(PathBuf::from)))
@@ -160,7 +173,12 @@ async fn main() -> Result<()> {
                     .or_else(|| app.net.as_ref().and_then(|n| n.nats_url.clone()))
                     .context("nats_url is required: provide it via --nats-url or in the --config file.")?;
 
-                benchkit::networked::announce::announce_job_loop(&resolved_nkey, &resolved_nats_url, resolved_crt.as_ref()).await.expect("Error starting announce loop.");
+                let resolved_rails_url = rails_url
+                    .clone()
+                    .or_else(|| app.net.as_ref().and_then(|n| n.rails_url.clone()))
+                    .context("rails_url is required: provide it via --nats-url or in the --config file.")?;
+
+                benchkit::networked::announce::announce_job_loop(&resolved_nkey, &resolved_nats_url, &resolved_rails_url, resolved_crt.as_ref()).await.expect("Error starting announce loop.");
             }
         }
     }

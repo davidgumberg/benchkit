@@ -34,7 +34,7 @@ pub async fn listen_for_jobs(
 /// Set up an async thread that listens for new jobs to be announced and adds
 /// them to the queue and a synchronous thread that waits for and executes
 /// jobs in the queue.
-pub fn client_loop(nats_url: &str, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
+pub fn client_loop(nats_url: &str, rails_url: &str, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
