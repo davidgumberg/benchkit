@@ -5,16 +5,15 @@ use std::path::PathBuf;
 use std::thread;
 
 use crate::benchmarks::Runner;
-use crate::config::{AppConfig, GlobalConfig};
+use crate::config::{AppConfig, GlobalConfig, NetConfig};
 use crate::networked::job::Job;
 use crate::networked::nats::create_nats_client;
 
 pub async fn listen_for_jobs(
-    nats_url: &str,
-    nats_crt: Option<&PathBuf>,
+    net_config: NetConfig,
     job_sender: mpsc::Sender<async_nats::Message>,
 ) -> Result<(), async_nats::Error> {
-    let client = create_nats_client(nats_url, nats_crt, None).await?;
+    let client = create_nats_client(net_config.clone()).await?;
 
     let mut subscriber = client.subscribe("benchkit.jobs").await?;
     println!("Subscribed to benchkit.jobs");
@@ -34,18 +33,18 @@ pub async fn listen_for_jobs(
 /// Set up an async thread that listens for new jobs to be announced and adds
 /// them to the queue and a synchronous thread that waits for and executes
 /// jobs in the queue.
-pub fn client_loop(nats_url: &str, rails_url: &str, nats_crt: Option<PathBuf>, app_config: AppConfig, out_dir: PathBuf) {
+pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathBuf) {
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
-    let nats_url = nats_url.to_string();
+    let net_config = net_config.clone();
     // Spawn the listener in a dedicated thread with its own tokio runtime
     let listener_thread = thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new()
             .expect("Failed to create tokio runtime");
         
         runtime.block_on(async {
-            if let Err(e) = listen_for_jobs(&nats_url, nats_crt.as_ref(), queue_sender).await {
+            if let Err(e) = listen_for_jobs(net_config, queue_sender).await {
                 eprintln!("Job listener error: {}", e);
             }
         });
@@ -61,7 +60,9 @@ pub fn client_loop(nats_url: &str, rails_url: &str, nats_crt: Option<PathBuf>, a
                 job.subject, 
             );
             
-            process_job(&job, app_config.clone(), out_dir.clone());
+            if let Err(e) = process_job(&job, app_config.clone(), out_dir.clone()) {
+                eprintln!("Error processing job!: {:#}", e);
+            }
         }
         
         println!("Job processor shutting down");
@@ -112,11 +113,23 @@ mod tests {
     use bytes::Bytes;
     use tempfile::TempDir;
 
+    
+    fn dummy_net_config() -> NetConfig {
+        NetConfig {
+            nats_url: "nats://255.255.255.255:9999".to_string(),
+            nkey: Some(PathBuf::new()),
+            certificate: None,
+            rails_url: "http://localhost".to_string(),
+            rails_api_token: "bogus".to_string(),
+        }
+    }
+
+
     #[tokio::test]
     async fn test_listen_for_jobs_connection_error() {
         let (tx, _rx) = mpsc::channel(10);
         
-        let result = listen_for_jobs("nats://255.255.255.255:9999", None, tx).await;
+        let result = listen_for_jobs(dummy_net_config(), tx).await;
         
         assert!(result.is_err(), "Expected connection to fail and return an error");
     }

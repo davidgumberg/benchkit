@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use tempfile::TempDir;
 
-use crate::config::NetConfig;
+use crate::config::{NetConfig, RawNetConfig};
 use crate::path_utils::process_path;
 
 /// Enum to hold user-selected tmpdir vs our own.
@@ -46,7 +46,7 @@ pub struct RawAppConfig {
     pub tmp_datadir: Option<PathBuf>,
     /// number of cores to use in building.
     pub build_cores: Option<usize>,
-    pub net: Option<NetConfig>,
+    pub net: Option<RawNetConfig>,
 }
 
 impl RawAppConfig {
@@ -68,16 +68,9 @@ impl RawAppConfig {
         let tmp_datadir = self.tmp_datadir
             .map(|p| process_path(&p, config_dir, true))
             .transpose()?;
-
-        let net = match self.net {
-            Some(mut net_cfg) => {
-                if let Some(cert_path) = net_cfg.certificate {
-                    net_cfg.certificate = Some(process_path(&cert_path, config_dir, true)?);
-                }
-                Some(net_cfg)
-            }
-            None => None,
-        };
+        let net = self.net
+            .map(|raw| raw.finalize(config_dir))
+            .transpose()?;
 
         AppConfig::new(
             path.to_path_buf(),

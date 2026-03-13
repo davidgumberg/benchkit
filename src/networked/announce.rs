@@ -1,17 +1,15 @@
 use anyhow::Result;
-use std::path::PathBuf;
 use std::io::{Write};
 
+use crate::config::NetConfig;
 use crate::networked::job::Job;
 use crate::networked::nats::create_nats_client;
 
 pub async fn announce_job(
     job: &str,
-    nkey_path: &PathBuf,
-    nats_url: &str,
-    cert_path: Option<&PathBuf>,
+    net_config: &NetConfig
 ) -> Result<(), async_nats::Error> {
-    let nats_client = match create_nats_client(nats_url, cert_path, Some(nkey_path)).await {
+    let nats_client = match create_nats_client(net_config.clone()).await {
         Ok(client) => client,
         Err(e) => {
             eprintln!("Failed to create NATS client: {}", e);
@@ -33,10 +31,7 @@ pub async fn announce_job(
 }
 
 pub async fn announce_job_loop(
-    nkey_path: &PathBuf,
-    nats_url: &str,
-    rails_url: &str,
-    cert_path: Option<&PathBuf>,
+    net_config: &NetConfig,
 ) -> Result<()> {
     loop {
         print!("Enter benchmark file path (or 'quit' to exit): ");
@@ -82,7 +77,7 @@ pub async fn announce_job_loop(
             }
         };
 
-        if let Err(e) = announce_job(&job_str, nkey_path, nats_url, cert_path).await {
+        if let Err(e) = announce_job(&job_str, net_config).await {
             eprintln!("Failed to announce job: {e}");
             continue;
         }
