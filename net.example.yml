@@ -1,0 +1,15 @@
+global:
+  source: https://github.com/bitcoin/bitcoin.git
+  commits: ["e221b252465", "8f73d952214"]
+
+benchmarks:
+  - name: "signet test sync"
+    network: signet
+    connect: 127.0.0.1:39333
+    benchmark:
+      command: "bitcoind -dbcache={dbcache} -stopatheight=10000"
+      warmup: 0
+      runs: 1
+      parameter_lists:
+        - var: dbcache
+          values: ["450", "32000"]

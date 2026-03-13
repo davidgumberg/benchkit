@@ -1,0 +1,10 @@
+---
+# todo: maybe make this optional since orchestrators don't use this
+scratch_dir: $HOME/.local/state/benchkit/scratch
+
+net:
+  certificate: ca.crt
+  nats_url: 127.0.0.1:4222
+  rails_url: http://127.0.0.1:3000
+  nkey: nk.key
+  rails_api_token: <INSERT_YOUR_RAILS_API_TOKEN>
