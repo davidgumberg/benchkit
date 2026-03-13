@@ -1,2 +1,13 @@
 /target
 .envrc
+
+*.crt
+*.key
+*.pem
+*.pub
+*.srl
+
+
+nats.conf
+client.yml
+orchestrator.yml
