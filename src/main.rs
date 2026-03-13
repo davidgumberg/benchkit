@@ -9,6 +9,7 @@ use benchkit::{
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use log::{info, warn};
+use rustls::crypto::ring::default_provider;
 use std::{path::PathBuf, process};
 
 const DEFAULT_CONFIG: &str = "config.yml";
@@ -89,6 +90,8 @@ enum SystemCommands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    rustls::crypto::CryptoProvider::install_default(default_provider())
+        .expect("Failed to set up default crypto provider.");
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
 
