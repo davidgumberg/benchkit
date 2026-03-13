@@ -8,6 +8,7 @@ use crate::benchmarks::Runner;
 use crate::config::{AppConfig, GlobalConfig, NetConfig};
 use crate::networked::job::Job;
 use crate::networked::nats::create_nats_client;
+use crate::networked::rails::RailsApiClient;
 
 pub async fn listen_for_jobs(
     net_config: NetConfig,
@@ -37,20 +38,20 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
-    let net_config = net_config.clone();
+    let listener_net_config = net_config.clone();
     // Spawn the listener in a dedicated thread with its own tokio runtime
     let listener_thread = thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new()
             .expect("Failed to create tokio runtime");
         
         runtime.block_on(async {
-            if let Err(e) = listen_for_jobs(net_config, queue_sender).await {
+            if let Err(e) = listen_for_jobs(listener_net_config, queue_sender).await {
                 eprintln!("Job listener error: {}", e);
             }
         });
     });
     
-    // Spawn the synchronous job processor thread
+    let processor_net_config = net_config.clone();
     let processor_thread = thread::spawn(move || {
         println!("Job processor started");
         
@@ -60,7 +61,7 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
                 job.subject, 
             );
             
-            if let Err(e) = process_job(&job, app_config.clone(), out_dir.clone()) {
+            if let Err(e) = process_job(&job, &processor_net_config, app_config.clone(), out_dir.clone()) {
                 eprintln!("Error processing job!: {:#}", e);
             }
         }
@@ -72,7 +73,7 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
     processor_thread.join().expect("Processor thread panicked");
 }
 
-fn process_job(job_msg: &async_nats::Message, app: AppConfig, out_dir: PathBuf) -> Result<()> {
+fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppConfig, out_dir: PathBuf) -> Result<()> {
     let payload = String::from_utf8(job_msg.payload.to_vec())
         .context("job payload is not valid UTF-8")?;
     let job = Job::from_yaml(&payload)
@@ -81,27 +82,34 @@ fn process_job(job_msg: &async_nats::Message, app: AppConfig, out_dir: PathBuf) 
     // Use UUID for unique output dir.
     let out_dir = out_dir.join(job.id.to_string());
 
-    let config = GlobalConfig { app, bench: job.bench };
+    let config = GlobalConfig { app, bench: job.bench.clone() };
     let runner = Runner::new(config, out_dir.clone())
         .expect("Failed to initialize job runner.");
     let results = runner.run(None, true)
         .expect("Failed to execute job runner.");
 
+    let rails_client = RailsApiClient::new(&net_config);
+
+    // Assume we're tracking commits, or just pick the first from global config
+    let commit = job.bench.global.commits.first().map(|s| s.as_str()).unwrap_or("unknown");
+
     for result in results {
-        for run in result.runs {
+        for run in &result.runs {
             if run.exit_code != 0 {
                 println!("Run {} of command {} failed with exit code: {}",
-                    run.iteration,
-                    result.command,
-                    run.exit_code
+                    run.iteration, result.command, run.exit_code
                 );
-                // TODO: let the server know that something went wrong so someone
-                // can come and fix it.
                 return Ok(())
             }
         }
+        
+        // Upload the successful result to Rails
+        println!("Uploading results to Rails...");
+        if let Err(e) = rails_client.post_result_blocking(job.id, commit, &result) {
+             eprintln!("Failed to upload results to Rails: {e}");
+        }
     }
-    // TODO: upload results here.
+
     println!("Completed job! Find Results in {}", out_dir.display());
 
     Ok(())
@@ -151,7 +159,7 @@ mod tests {
         let dummy_app = AppConfig::default();
         let out_dir = TempDir::new().unwrap();
 
-        let result = process_job(&msg, dummy_app, out_dir.path().to_path_buf());
+        let result = process_job(&msg, dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("UTF-8"),
@@ -174,7 +182,7 @@ mod tests {
         let dummy_app = AppConfig::default();
         let out_dir = TempDir::new().unwrap();
 
-        let result = process_job(&msg, dummy_app, out_dir.path().to_path_buf());
+        let result = process_job(&msg, dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("job"),

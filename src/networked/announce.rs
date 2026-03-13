@@ -4,6 +4,7 @@ use std::io::{Write};
 use crate::config::NetConfig;
 use crate::networked::job::Job;
 use crate::networked::nats::create_nats_client;
+use crate::networked::rails::RailsApiClient;
 
 pub async fn announce_job(
     job: &str,
@@ -33,6 +34,7 @@ pub async fn announce_job(
 pub async fn announce_job_loop(
     net_config: &NetConfig,
 ) -> Result<()> {
+    let rails_client = RailsApiClient::new(net_config);
     loop {
         print!("Enter benchmark file path (or 'quit' to exit): ");
         std::io::stdout().flush().expect("Failed to flush stdout");
@@ -76,6 +78,13 @@ pub async fn announce_job_loop(
                 continue;
             }
         };
+
+        println!("Publishing job to Rails server...");
+        if let Err(e) = rails_client.post_job(&job).await {
+            eprintln!("Failed to post job to Rails: {e}");
+            // Optional: decide if you want to skip NATS if Rails fails
+            continue; 
+        }
 
         if let Err(e) = announce_job(&job_str, net_config).await {
             eprintln!("Failed to announce job: {e}");

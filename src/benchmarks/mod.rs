@@ -26,7 +26,7 @@ pub use hook_runner::{HookArgs, HookRunner, HookStage};
 mod hooks;
 pub use hooks::StandardHookExecutor;
 
-mod results;
+pub mod results;
 pub use results::{BenchmarkResult, InstrumentationType, RunResult, RunSummary};
 
 mod parameters;
