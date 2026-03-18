@@ -1,10 +1,5 @@
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-
-/// Default port for Bitcoin Core P2P connections
-pub const DEFAULT_P2P_PORT: u16 = 22000;
-
-/// Default port for Bitcoin Core RPC connections
-pub const DEFAULT_RPC_PORT: u16 = 22002; // skip 1 for the tor port.
 
 /// Check if a binary exists for a given commit
 pub fn binary_exists(bin_dir: &Path, commit: &str) -> bool {
@@ -38,12 +33,20 @@ pub fn check_binaries_exist(
     }
 }
 
+fn get_available_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
+}
+
 /// Build base bitcoind command arguments that are common across all invocations
 pub fn build_bitcoind_base_args(network: &str, datadir: &Path, connect: &str) -> Vec<String> {
     let mut args = vec![
         format!("-chain={}", network),
-        format!("-port={}", DEFAULT_P2P_PORT),
-        format!("-rpcport={}", DEFAULT_RPC_PORT),
+        format!("-port={}", get_available_port()),
+        format!("-rpcport={}", get_available_port()),
         format!("-datadir={}", datadir.display()),
     ];
 
