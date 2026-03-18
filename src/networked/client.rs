@@ -103,7 +103,6 @@ fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppCo
             }
         }
         
-        // Upload the successful result to Rails
         println!("Uploading results to Rails...");
         if let Err(e) = rails_client.post_result_blocking(job.id, commit, &result) {
              eprintln!("Failed to upload results to Rails: {e}");
@@ -159,7 +158,7 @@ mod tests {
         let dummy_app = AppConfig::default();
         let out_dir = TempDir::new().unwrap();
 
-        let result = process_job(&msg, dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
+        let result = process_job(&msg, &dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("UTF-8"),
@@ -182,7 +181,7 @@ mod tests {
         let dummy_app = AppConfig::default();
         let out_dir = TempDir::new().unwrap();
 
-        let result = process_job(&msg, dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
+        let result = process_job(&msg, &dummy_net_config(), dummy_app, out_dir.path().to_path_buf());
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("job"),
