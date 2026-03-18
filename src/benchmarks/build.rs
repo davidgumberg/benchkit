@@ -174,17 +174,31 @@ impl Builder {
     }
 
     fn checkout_commit(&self, source_dir: &PathBuf, commit: &str) -> Result<()> {
-        let status = Command::new("git")
-            .current_dir(source_dir)
-            .arg("checkout")
-            .arg(commit)
-            .status()
-            .with_context(|| format!("Failed to checkout commit {commit}"))?;
+        let max_retries = 5;
+        
+        // In case there is contention over the .git folder
+        for attempt in 1..=max_retries {
+            let status = Command::new("git")
+                .current_dir(source_dir)
+                .arg("checkout")
+                .arg(commit)
+                .status()
+                .with_context(|| format!("Failed to checkout commit {commit}"))?;
 
-        if !status.success() {
-            anyhow::bail!("Git checkout failed for commit {}", commit);
+            if status.success() {
+                return Ok(());
+            }
+
+            if attempt < max_retries {
+                log::warn!(
+                    "Git checkout failed for commit {} (attempt {}/{}). Retrying in 1s...", 
+                    commit, attempt, max_retries
+                );
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
         }
-        Ok(())
+
+        anyhow::bail!("Git checkout failed for commit {} after {} attempts", commit, max_retries);
     }
 
     fn run_build(&self, source_dir: &PathBuf, commit_hash: &str) -> Result<()> {
@@ -255,17 +269,33 @@ impl Builder {
 
     fn restore_git_state(&self, source_dir: &PathBuf, initial_ref: &str) -> Result<()> {
         debug!("restoring git state of {source_dir:?}");
-        let status = Command::new("git")
-            .current_dir(source_dir)
-            .arg("checkout")
-            .arg(initial_ref)
-            .status()
-            .with_context(|| format!("Failed to restore git state to {initial_ref}"))?;
 
-        if !status.success() {
-            anyhow::bail!("Failed to restore git state");
+        let max_retries = 5;
+        for attempt in 1..max_retries {
+            let status = Command::new("git")
+                .current_dir(source_dir)
+                .arg("checkout")
+                .arg(initial_ref)
+                .status()
+                .with_context(|| format!("Failed to restore git state to {initial_ref}"))?;
+
+            if status.success() {
+                if attempt > 1 {
+                    info!("Successfully restored git state on attempt {}", attempt);
+                }
+                return Ok(());
+            }
+
+            if attempt < max_retries {
+                log::warn!(
+                    "Failed to restore git state (attempt {}/{}). Retrying in 1s...", 
+                    attempt, max_retries
+                );
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
         }
-        Ok(())
+
+        anyhow::bail!("Failed to restore git state");
     }
 
     fn get_build_path(&self, commit_hash: &str) -> PathBuf {
