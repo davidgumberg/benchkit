@@ -90,9 +90,6 @@ fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppCo
 
     let rails_client = RailsApiClient::new(&net_config);
 
-    // Assume we're tracking commits, or just pick the first from global config
-    let commit = job.bench.global.commits.first().map(|s| s.as_str()).unwrap_or("unknown");
-
     for result in results {
         for run in &result.runs {
             if run.exit_code != 0 {
@@ -104,7 +101,7 @@ fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppCo
         }
         
         println!("Uploading results to Rails...");
-        if let Err(e) = rails_client.post_result_blocking(job.id, commit, &result) {
+        if let Err(e) = rails_client.post_result_blocking(job.id, &result) {
              eprintln!("Failed to upload results to Rails: {e}");
         }
     }

@@ -65,7 +65,7 @@ impl RailsApiClient {
         Ok(())
     }
 
-    pub fn post_result_blocking(&self, job_uuid: Uuid, commit: &str, result: &BenchmarkResult) -> Result<()> {
+    pub fn post_result_blocking(&self, job_uuid: Uuid, result: &BenchmarkResult) -> Result<()> {
         let client = reqwest::blocking::Client::new();
         let url = format!("{}/results.json", self.base_url);
 
@@ -81,7 +81,7 @@ impl RailsApiClient {
             "result": {
                 "job_uuid": job_uuid.to_string(),
                 "command": result.command,
-                "commit": commit,
+                "commit": result.parameters["commit"],
                 "parameters": result.parameters,
                 "runs_attributes": runs_attributes
             }
