@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use log::{debug, info, warn};
 use std::collections::HashMap;
+#[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::benchmarks::export::ResultExporter;
+use crate::benchmarks::flamegraph::Flamegrapher;
 use crate::benchmarks::hook_runner::{HookArgs, HookRunner, HookStage};
 use crate::benchmarks::log_monitor::LogMonitor;
 use crate::benchmarks::parameters::{ParameterList, ParameterMatrix, ParameterUtils};
@@ -50,7 +52,6 @@ pub struct BenchmarkRunnerBuilder {
 }
 
 impl BenchmarkRunnerBuilder {
-    /// Create a new BenchmarkRunnerBuilder with required parameters
     pub fn new(out_dir: PathBuf, hook_runner: HookRunner) -> Self {
         Self {
             hook_runner,
@@ -103,17 +104,30 @@ impl BenchmarkRunnerBuilder {
     /// Enable perf instrumentation
     pub fn perf_instrumentation(mut self, enable: bool) -> Self {
         if enable {
-            self.instrumentation_mode = InstrumentationType::Perf
+            self.instrumentation_mode = InstrumentationType::Perf;
+        }
+        self
+    }
+
+    pub fn flamegraph_instrumentation(mut self, enable: bool) -> Self {
+        if enable {
+            self.instrumentation_mode = InstrumentationType::Flamegraph;
         }
         self
     }
 
     /// Build the BenchmarkRunner, validating parameters if needed
     pub fn build(self) -> Result<BenchmarkRunner> {
-        if self.instrumentation_mode == InstrumentationType::Perf {
-            // Validate perf is available before building
-            PerfInstrumentor::validate_perf_available()
-                .context("perf instrumentation requested but perf is not available")?;
+        match self.instrumentation_mode {
+            InstrumentationType::Perf => {
+                PerfInstrumentor::validate_perf_available()
+                    .context("perf instrumentation requested but perf is not available")?;
+            }
+            InstrumentationType::Flamegraph => {
+                Flamegrapher::validate_flamegraph()
+                    .context("flamegraph instrumentation requested but flamegraph is not available")?;
+            }
+            _ => {}
         }
 
         // Create the BenchmarkRunner
@@ -157,20 +171,15 @@ impl BenchmarkRunner {
         params: &HashMap<String, String>,
     ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
-
-        let total_runs = if self.instrumentation_mode == InstrumentationType::Perf {
-            runs * 2 // Each benchmark gets both uninstrumented and instrumented runs
+        let total_runs = if self.instrumentation_mode.doubles_runs() {
+            runs * 2
         } else {
             runs
         };
 
         info!(
             "Running benchmark: {command} for {runs} runs (commit: {commit}){}",
-            if self.instrumentation_mode == InstrumentationType::Perf {
-                " with perf instrumentation"
-            } else {
-                ""
-            }
+            self.instrumentation_mode.label()
         );
 
         // Run the setup script once before all benchmark runs
@@ -178,25 +187,28 @@ impl BenchmarkRunner {
         let mut results = Vec::with_capacity(total_runs);
 
         // Execute the benchmark runs
-        if self.instrumentation_mode == InstrumentationType::Perf {
-            // Run each benchmark twice: uninstrumented then instrumented
+        if self.instrumentation_mode.doubles_runs() {
+            // Profiling mode: alternate uninstrumented and instrumented runs
             for i in 0..runs {
-                // Run uninstrumented version first
-                let result =
-                    self.execute_single_run(command, i * 2, commit, params, hook_args, false)?;
-                results.push(result);
-
-                // Run instrumented version second
-                let result =
-                    self.execute_single_run(command, i * 2 + 1, commit, params, hook_args, true)?;
-                results.push(result);
+                results.push(
+                    self.execute_single_run(command, i * 2, commit, params, hook_args, false)?,
+                );
+                results.push(
+                    self.execute_single_run(command, i * 2 + 1, commit, params, hook_args, true)?,
+                );
             }
         } else {
-            // Run normally without instrumentation
+            // All other modes: every run uses the configured instrumentation
+            let use_instrumentation = matches!(
+                self.instrumentation_mode,
+                InstrumentationType::Perf | InstrumentationType::Flamegraph
+            );
             for i in 0..runs {
-                let result =
-                    self.execute_single_run(command, i, commit, params, hook_args, false)?;
-                results.push(result);
+                results.push(
+                    self.execute_single_run(
+                        command, i, commit, params, hook_args, use_instrumentation,
+                    )?,
+                );
             }
         }
 
@@ -207,14 +219,12 @@ impl BenchmarkRunner {
         let summary = ResultAnalyzer::calculate_summary(&results);
 
         // Create the benchmark result
-        let benchmark_result = BenchmarkResult {
+        Ok(BenchmarkResult {
             command: command.to_string(),
-            parameters: params.clone(), // Copy the parameters into the result
+            parameters: params.clone(),
             runs: results,
             summary,
-        };
-
-        Ok(benchmark_result)
+        })
     }
 
     /// Execute a single benchmark run (either instrumented or uninstrumented)
@@ -225,7 +235,7 @@ impl BenchmarkRunner {
         commit: &str,
         params: &HashMap<String, String>,
         hook_args: &HookArgs,
-        use_perf_instrumentation: bool,
+        use_instrumentation: bool,
     ) -> Result<RunResult> {
         // Create iteration-specific hook args with parameter directory
         let params_dir = ParameterUtils::params_to_dirname(params);
@@ -239,10 +249,23 @@ impl BenchmarkRunner {
         self.hook_runner.run_hook(HookStage::Prepare, &iter_args)?;
 
         let start = Instant::now();
-        let (output, profile_result) = if use_perf_instrumentation {
-            let (output, profile, _) =
-                self.execute_command_with_perf(command, iteration, commit, params)?;
-            (output, profile)
+        let (output, profile_result) = if use_instrumentation {
+            match self.instrumentation_mode {
+                InstrumentationType::Perf => {
+                    let (output, profile, _) =
+                        self.execute_command_with_perf(command, iteration, commit, params)?;
+                    (output, profile)
+                }
+                InstrumentationType::Flamegraph => {
+                    self.execute_command_with_flamegraph(command, iteration, commit, params)?
+                }
+                InstrumentationType::Profiling => {
+                    // Profiling's instrumented run still goes through execute_command
+                    // which handles the Profiling mode internally
+                    self.execute_command(command, iteration, commit, params)?
+                }
+                InstrumentationType::None => unreachable!(),
+            }
         } else {
             self.execute_command(command, iteration, commit, params)?
         };
@@ -261,8 +284,8 @@ impl BenchmarkRunner {
             iteration,
             duration_ms,
             exit_code: output.status.code().unwrap_or(-1),
-            instrumentation: if use_perf_instrumentation {
-                InstrumentationType::Perf
+            instrumentation: if use_instrumentation {
+                self.instrumentation_mode
             } else {
                 InstrumentationType::None
             },
@@ -277,7 +300,6 @@ impl BenchmarkRunner {
 
         // Run conclude script after the benchmark run
         self.hook_runner.run_hook(HookStage::Conclude, &iter_args)?;
-
         Ok(run_result)
     }
 
@@ -312,6 +334,7 @@ impl BenchmarkRunner {
         let output = child
             .wait_with_output()
             .context("Failed to wait for perf command completion")?;
+
         let perf_success = perf_instrumentor.finalize_perf_data()?;
         if !perf_success {
             warn!("perf instrumentation may have failed - no perf.data generated");
@@ -325,6 +348,49 @@ impl BenchmarkRunner {
         }
 
         Ok((output, None, Some(perf_data_path)))
+    }
+
+    fn execute_command_with_flamegraph(
+        &self,
+        command: &str,
+        iteration: usize,
+        commit: &str,
+        params: &HashMap<String, String>,
+    ) -> Result<(std::process::Output, Option<ProfileResult>)> {
+        let params_dir = ParameterUtils::params_to_dirname(params);
+        let flamegraph_out_dir = self
+            .out_dir
+            .join(commit)
+            .join(params_dir)
+            .join(iteration.to_string());
+
+        let flamegrapher = Flamegrapher::new(flamegraph_out_dir);
+        let (flamegraph_command_vec, _svg_path) = flamegrapher.wrap_command(command)?;
+        let flamegraph_command = flamegraph_command_vec.join(" ");
+
+        info!(
+            "Executing command with flamegraph instrumentation: {}",
+            flamegraph_command
+        );
+
+        let child = self.launch_command_with_affinity(&flamegraph_command)?;
+        let output = child
+            .wait_with_output()
+            .context("Failed to wait for flamegraph command completion")?;
+
+        let svg_created = flamegrapher.finalize_flamegraph_svg()?;
+        if !svg_created {
+            warn!("Flamegraph instrumentation may have failed - no SVG generated");
+        }
+
+        if !output.status.success() {
+            debug!(
+                "Flamegraph command failed with status: {}",
+                output.status.code().unwrap_or(-1)
+            );
+        }
+
+        Ok((output, None))
     }
 
     /// Launch a command with CPU affinity constraints
@@ -366,8 +432,8 @@ impl BenchmarkRunner {
             if self.stop_on_log_pattern.is_some() && !command.contains("-printtoconsole") {
                 let updated_command = format!("{command} -printtoconsole");
                 debug!(
-                "Automatically added -printtoconsole for log pattern matching: {updated_command}"
-            );
+                    "Automatically added -printtoconsole for log pattern matching: {updated_command}"
+                );
                 updated_command
             } else {
                 command.to_string()
@@ -428,7 +494,7 @@ impl BenchmarkRunner {
                     Err(e) => warn!("Failed to terminate process: {e}"),
                 }
 
-                // Also try to terminate any child processes via process group
+                #[cfg(unix)]
                 if let Some(pgid) = child.id().checked_neg() {
                     unsafe {
                         libc::kill(pgid as i32, libc::SIGTERM);

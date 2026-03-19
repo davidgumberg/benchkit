@@ -17,6 +17,23 @@ pub enum InstrumentationType {
 
 }
 
+impl InstrumentationType {
+    /// Returns true for profiling mode which doubles runs
+    /// (uninstrumented + instrumented pairs for comparison)
+    pub fn doubles_runs(&self) -> bool {
+        matches!(self, Self::Profiling)
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::None => "",
+            Self::Perf => " with perf instrumentation",
+            Self::Flamegraph => " with flamegraph instrumentation",
+            Self::Profiling => " with profiling",
+        }
+    }
+}
+
 /// Results from a single benchmark run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunResult {
