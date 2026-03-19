@@ -178,12 +178,17 @@ impl PerfInstrumentorBuilder {
         self
     }
 
+
     /// Set sampling frequency (replaces default -F 99)
     pub fn sampling_frequency(mut self, freq: u32) -> Self {
-        // Remove existing frequency settings
-        self.perf_options.retain(|opt| opt != "-F");
-        if let Some(pos) = self.perf_options.iter().position(|opt| opt == "99") {
+        // Is there a -F at some pos?
+        if let Some(pos) = self.perf_options.iter().position(|opt| opt == "-F") {
+            // Drop the item at pos
             self.perf_options.remove(pos);
+            // Drop the item that now shifted into pos.
+            if pos < self.perf_options.len() {
+                self.perf_options.remove(pos);
+            }
         }
 
         self.perf_options.push("-F".to_string());
