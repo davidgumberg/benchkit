@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
+use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -7,15 +10,38 @@ use crate::benchmarks::{binary_exists, RepoSource, RepositoryManager};
 use crate::config::GlobalConfig;
 use crate::path_utils;
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct BuildMeta {
+    /// Hash of the cmake args used for this build
+    settings_hash: u64,
+    /// The actual args, for human inspection
+    cmake_args: Vec<String>,
+}
+
 pub struct Builder {
     config: GlobalConfig,
     repo_manager: Option<RepositoryManager>,
+    needs_frame_pointers: bool,
 }
 
 impl Builder {
     pub fn new(config: GlobalConfig) -> Result<Self> {
         // Get the source path as a string, preserving URL format for remote repos
         let source_path_str = config.bench.global.source.to_string_lossy().to_string();
+
+        let needs_frame_pointers = config.bench.global.benchmark
+            .as_ref()
+            .and_then(|b| b.flamegraph)
+            .unwrap_or(false);
+
+        // ...or check any individual benchmark too:
+        let any_flamegraph = config.bench.benchmarks.iter().any(|b| {
+            b.benchmark.get("flamegraph")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        });
+
+        let needs_frame_pointers = needs_frame_pointers || any_flamegraph;
 
         debug!("Source path from config: {source_path_str}");
 
@@ -63,6 +89,7 @@ impl Builder {
                 Ok(Self {
                     config,
                     repo_manager: None,
+                    needs_frame_pointers,
                 })
             }
             RepoSource::Remote(url) => {
@@ -76,6 +103,7 @@ impl Builder {
                 Ok(Self {
                     config,
                     repo_manager: Some(repo_manager),
+                    needs_frame_pointers,
                 })
             }
         }
@@ -107,12 +135,16 @@ impl Builder {
 
         // Build all commits up-front
         for commit in &self.config.bench.global.commits {
-            if !binary_exists(&self.config.app.bin_dir, commit) {
-                info!("Building binary for commit {commit}");
-                self.build_commit(&source_dir, commit)?;
+            if self.binary_is_current(commit) {
+                info!("Binary for commit {commit} is up to date, skipping build");
             } else {
-                info!("Binary already exists for commit {commit}, skipping build");
-            };
+                if binary_exists(&self.config.app.bin_dir, commit) {
+                    info!("Binary for commit {commit} exists but build settings changed, rebuilding");
+                } else {
+                    info!("Building binary for commit {commit}");
+                }
+                self.build_commit(&source_dir, commit)?;
+            }
         }
 
         self.restore_git_state(&source_dir, &initial_ref)?;
@@ -170,6 +202,7 @@ impl Builder {
         self.checkout_commit(source_dir, original_commit)?;
         self.run_build(source_dir, original_commit)?;
         self.copy_binary(original_commit)?;
+        self.write_build_meta(original_commit)?;
         Ok(())
     }
 
@@ -213,10 +246,8 @@ impl Builder {
         let mut cmd = Command::new("cmake");
         cmd.current_dir(source_dir).arg("-B").arg(&canonical_dir);
         // Add custom build flags if configured
-        if let Some(cmake_args) = &self.config.bench.global.cmake_build_args {
-            for arg in cmake_args {
-                cmd.arg(arg);
-            }
+        for arg in &self.effective_cmake_args() {
+            cmd.arg(arg);
         }
         let config_status = cmd
             .status()
@@ -304,5 +335,91 @@ impl Builder {
             .scratch_dir
             .join("build")
             .join(format!("{commit_hash}"))
+    }
+
+    fn effective_cmake_args(&self) -> Vec<String> {
+        let mut args = self.config.bench.global.cmake_build_args
+            .clone()
+            .unwrap_or_default();
+
+        if self.needs_frame_pointers {
+            let has_fp_flag = args.iter().any(|a| a.contains("no-omit-frame-pointer"));
+            if !has_fp_flag {
+                // Find existing C/CXX flags and append, rather than overwrite
+                let mut found_c = false;
+                let mut found_cxx = false;
+
+                for arg in args.iter_mut() {
+                    if arg.starts_with("-DCMAKE_C_FLAGS=") {
+                        *arg = format!("{} -fno-omit-frame-pointer", arg);
+                        found_c = true;
+                    } else if arg.starts_with("-DCMAKE_CXX_FLAGS=") {
+                        *arg = format!("{} -fno-omit-frame-pointer", arg);
+                        found_cxx = true;
+                    }
+                }
+
+                if !found_c {
+                    args.push("-DCMAKE_C_FLAGS=-fno-omit-frame-pointer".to_string());
+                }
+                if !found_cxx {
+                    args.push("-DCMAKE_CXX_FLAGS=-fno-omit-frame-pointer".to_string());
+                }
+            }
+        }
+
+        args
+    }
+
+    /// Compute a deterministic hash of the build settings
+    fn build_settings_hash(&self) -> u64 {
+        let args = self.effective_cmake_args();
+        let mut hasher = DefaultHasher::new();
+        args.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Path to the metadata file for a given commit
+    fn meta_path(&self, commit: &str) -> PathBuf {
+        self.config.app.bin_dir.join(format!("bitcoind-{commit}.build-meta.json"))
+    }
+
+    /// Write build metadata after a successful build
+    fn write_build_meta(&self, commit: &str) -> Result<()> {
+        let meta = BuildMeta {
+            settings_hash: self.build_settings_hash(),
+            cmake_args: self.effective_cmake_args(),
+        };
+        let path = self.meta_path(commit);
+        let contents = serde_json::to_string_pretty(&meta)
+            .context("Failed to serialize build metadata")?;
+        std::fs::write(&path, contents)
+            .with_context(|| format!("Failed to write build metadata to {}", path.display()))?;
+        Ok(())
+    }
+
+    /// Read build metadata, if it exists
+    fn read_build_meta(&self, commit: &str) -> Option<BuildMeta> {
+        let path = self.meta_path(commit);
+        let contents = std::fs::read_to_string(&path).ok()?;
+        serde_json::from_str(&contents).ok()
+    }
+
+    /// Check if a binary exists AND was built with current settings
+    fn binary_is_current(&self, commit: &str) -> bool {
+        if !binary_exists(&self.config.app.bin_dir, commit) {
+            return false;
+        }
+
+        match self.read_build_meta(commit) {
+            Some(meta) => meta.settings_hash == self.build_settings_hash(),
+            None => {
+                // Binary exists but no metadata — treat as stale
+                debug!(
+                    "Binary for {commit} exists but has no build metadata, will rebuild"
+                );
+                false
+            }
+        }
     }
 }
