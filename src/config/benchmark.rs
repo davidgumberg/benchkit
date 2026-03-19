@@ -22,6 +22,7 @@ pub struct BenchmarkOptions {
     pub profile_interval: Option<u64>,
     pub stop_on_log_pattern: Option<String>,
     pub perf_instrumentation: Option<bool>,
+    pub flamegraph: Option<bool>,
 }
 
 const fn default_warmup() -> usize {
@@ -50,6 +51,7 @@ impl BenchmarkOptions {
             profile_interval: None,
             stop_on_log_pattern: None,
             perf_instrumentation: None,
+            flamegraph: None,
         }
     }
 
@@ -77,6 +79,22 @@ impl BenchmarkOptions {
                 anyhow::bail!("perf_instrumentation is only supported on Linux");
             }
         }
+
+        // Validate mutual exclusion of instrumentation modes
+        let modes_enabled = [
+            self.profile.unwrap_or(false),
+            self.perf_instrumentation.unwrap_or(false),
+            self.flamegraph.unwrap_or(false),
+        ];
+        let count = modes_enabled.iter().filter(|&&v| v).count();
+        if count > 1 {
+            anyhow::bail!(
+                "Only one instrumentation mode can be enabled at a time. \
+                 Found {} of: profile, perf_instrumentation, flamegraph",
+                count
+            );
+        }
+
 
         Ok(())
     }
@@ -128,6 +146,10 @@ impl BenchmarkOptions {
             map.get("perf_instrumentation").and_then(|v| v.as_bool())
         {
             result.perf_instrumentation = Some(perf_instrumentation);
+        }
+
+        if let Some(flamegraph) = map.get("flamegraph").and_then(|v| v.as_bool()) {
+            result.flamegraph = Some(flamegraph);
         }
 
         Ok(result)
@@ -307,6 +329,7 @@ mod tests {
             profile_interval: Some(5),
             stop_on_log_pattern: None,
             perf_instrumentation: None,
+            flamegraph: None,
         };
 
         let mut override_map = HashMap::new();

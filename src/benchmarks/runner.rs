@@ -151,6 +151,7 @@ impl Runner {
         .benchmark_cores(self.global_config.bench.global.benchmark_cores.clone())
         .stop_on_log_pattern(options.stop_on_log_pattern.clone())
         .perf_instrumentation(options.perf_instrumentation.unwrap_or(false))
+        .flamegraph_instrumentation(options.flamegraph.unwrap_or(false))
         .build()?;
 
         // Get command template
