@@ -7,9 +7,14 @@ use crate::benchmarks::profiler::ProfileResult;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InstrumentationType {
     /// Standard benchmark run without additional instrumentation
-    Uninstrumented,
+    None,
+    /// Benchmark run under flamegraph-rs instrumentation
+    Flamegraph,
     /// Benchmark run under perf profiling instrumentation
-    PerfInstrumented,
+    Perf,
+    /// Benchmark run under our profiling instrumentation
+    Profiling,
+
 }
 
 /// Results from a single benchmark run

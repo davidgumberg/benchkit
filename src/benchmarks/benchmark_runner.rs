@@ -25,8 +25,6 @@ pub struct BenchmarkRunner {
     capture_output: bool,
     /// Parameter matrix for running template commands
     parameter_matrix: Option<ParameterMatrix>,
-    /// Whether to enable profiling
-    enable_profiling: bool,
     /// Directory to store profiling output
     out_dir: PathBuf,
     /// Sampling interval for profiling in seconds
@@ -35,8 +33,8 @@ pub struct BenchmarkRunner {
     benchmark_cores: Option<String>,
     /// Optional regex pattern to stop the benchmark when matched
     stop_on_log_pattern: Option<String>,
-    /// Whether to enable perf instrumentation
-    enable_perf_instrumentation: bool,
+    /// Whether to enable profiling
+    instrumentation_mode: InstrumentationType,
 }
 
 /// Builder for BenchmarkRunner
@@ -44,12 +42,11 @@ pub struct BenchmarkRunnerBuilder {
     hook_runner: HookRunner,
     capture_output: bool,
     parameter_matrix: Option<ParameterMatrix>,
-    enable_profiling: bool,
     out_dir: PathBuf,
     profile_interval: u64,
     benchmark_cores: Option<String>,
     stop_on_log_pattern: Option<String>,
-    enable_perf_instrumentation: bool,
+    instrumentation_mode: InstrumentationType,
 }
 
 impl BenchmarkRunnerBuilder {
@@ -59,12 +56,11 @@ impl BenchmarkRunnerBuilder {
             hook_runner,
             capture_output: false,
             parameter_matrix: None,
-            enable_profiling: false,
             out_dir,
             profile_interval: 5, // Default to 5 second interval
             benchmark_cores: None,
             stop_on_log_pattern: None,
-            enable_perf_instrumentation: false,
+            instrumentation_mode: InstrumentationType::None,
         }
     }
 
@@ -82,9 +78,12 @@ impl BenchmarkRunnerBuilder {
 
     /// Enable profiling with the specified sampling interval
     pub fn profiling(mut self, enable: bool, interval: Option<u64>) -> Self {
-        self.enable_profiling = enable;
-        if let Some(interval) = interval {
-            self.profile_interval = interval;
+        if enable {
+            self.instrumentation_mode = InstrumentationType::Profiling;
+
+            if let Some(interval) = interval {
+                self.profile_interval = interval;
+            }
         }
         self
     }
@@ -103,18 +102,15 @@ impl BenchmarkRunnerBuilder {
 
     /// Enable perf instrumentation
     pub fn perf_instrumentation(mut self, enable: bool) -> Self {
-        self.enable_perf_instrumentation = enable;
+        if enable {
+            self.instrumentation_mode = InstrumentationType::Perf
+        }
         self
     }
 
     /// Build the BenchmarkRunner, validating parameters if needed
     pub fn build(self) -> Result<BenchmarkRunner> {
-        // Validate configuration
-        if self.enable_profiling && self.enable_perf_instrumentation {
-            anyhow::bail!("Cannot enable both profiling and perf instrumentation simultaneously");
-        }
-
-        if self.enable_perf_instrumentation {
+        if self.instrumentation_mode == InstrumentationType::Perf {
             // Validate perf is available before building
             PerfInstrumentor::validate_perf_available()
                 .context("perf instrumentation requested but perf is not available")?;
@@ -125,12 +121,11 @@ impl BenchmarkRunnerBuilder {
             hook_runner: self.hook_runner,
             capture_output: self.capture_output,
             parameter_matrix: self.parameter_matrix,
-            enable_profiling: self.enable_profiling,
             out_dir: self.out_dir,
             profile_interval: self.profile_interval,
             benchmark_cores: self.benchmark_cores,
             stop_on_log_pattern: self.stop_on_log_pattern,
-            enable_perf_instrumentation: self.enable_perf_instrumentation,
+            instrumentation_mode: self.instrumentation_mode,
         })
     }
 }
@@ -163,7 +158,7 @@ impl BenchmarkRunner {
     ) -> Result<BenchmarkResult> {
         let commit = &hook_args.commit;
 
-        let total_runs = if self.enable_perf_instrumentation {
+        let total_runs = if self.instrumentation_mode == InstrumentationType::Perf {
             runs * 2 // Each benchmark gets both uninstrumented and instrumented runs
         } else {
             runs
@@ -171,7 +166,7 @@ impl BenchmarkRunner {
 
         info!(
             "Running benchmark: {command} for {runs} runs (commit: {commit}){}",
-            if self.enable_perf_instrumentation {
+            if self.instrumentation_mode == InstrumentationType::Perf {
                 " with perf instrumentation"
             } else {
                 ""
@@ -183,7 +178,7 @@ impl BenchmarkRunner {
         let mut results = Vec::with_capacity(total_runs);
 
         // Execute the benchmark runs
-        if self.enable_perf_instrumentation {
+        if self.instrumentation_mode == InstrumentationType::Perf {
             // Run each benchmark twice: uninstrumented then instrumented
             for i in 0..runs {
                 // Run uninstrumented version first
@@ -267,9 +262,9 @@ impl BenchmarkRunner {
             duration_ms,
             exit_code: output.status.code().unwrap_or(-1),
             instrumentation: if use_perf_instrumentation {
-                InstrumentationType::PerfInstrumented
+                InstrumentationType::Perf
             } else {
-                InstrumentationType::Uninstrumented
+                InstrumentationType::None
             },
             output: if self.capture_output {
                 // Only store output if explicitly requested
@@ -343,7 +338,7 @@ impl BenchmarkRunner {
         // 2. stop_on_log_pattern is configured (for monitoring)
         // 3. We're not profiling (profiling doesn't capture output)
         let should_capture =
-            !self.enable_profiling && (self.capture_output || self.stop_on_log_pattern.is_some());
+            self.instrumentation_mode != InstrumentationType::Profiling  && (self.capture_output || self.stop_on_log_pattern.is_some());
 
         // Create a command executor with our benchmark settings
         let executor = CommandExecutor::builder()
@@ -380,13 +375,12 @@ impl BenchmarkRunner {
 
         debug!("Executing command: {final_command}");
 
-        // Check for conflicts between profiling and stop_on_log_pattern
-        if self.enable_profiling && self.stop_on_log_pattern.is_some() {
-            warn!("Both profiling and stop_on_log_pattern are configured. Profiling takes precedence, stop_on_log_pattern will be ignored for this run.");
-        }
-
         // If profiling is enabled, use the profiler to execute the command
-        if self.enable_profiling {
+        if self.instrumentation_mode == InstrumentationType::Profiling {
+            // Check for conflicts between profiling and stop_on_log_pattern
+            if self.stop_on_log_pattern.is_some() {
+                warn!("Both profiling and stop_on_log_pattern are configured. Profiling takes precedence, stop_on_log_pattern will be ignored for this run.");
+            }
             // Create a directory structure with commit/params/iteration
             let params_dir = ParameterUtils::params_to_dirname(params);
             let profile_out_dir = self
