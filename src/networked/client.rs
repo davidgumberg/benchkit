@@ -78,7 +78,6 @@ fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppCo
         .context("job payload is not valid UTF-8")?;
     let job = Job::from_yaml(&payload)
         .context("Error building job from message payload.")?;
-    // (&String::from_utf8(job_msg.payload.to_vec()).unwrap()).unwrap();
     // Use UUID for unique output dir.
     let out_dir = out_dir.join(job.id.to_string());
 

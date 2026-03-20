@@ -249,35 +249,39 @@ impl BenchmarkRunner {
         self.hook_runner.run_hook(HookStage::Prepare, &iter_args)?;
 
         let start = Instant::now();
-        let (output, profile_result) = if use_instrumentation {
+        let (output, profile_result, flamegraph_path) = if use_instrumentation {
             match self.instrumentation_mode {
                 InstrumentationType::Perf => {
                     let (output, profile, _) =
                         self.execute_command_with_perf(command, iteration, commit, params)?;
-                    (output, profile)
+                    (output, profile, None)
                 }
                 InstrumentationType::Flamegraph => {
                     self.execute_command_with_flamegraph(command, iteration, commit, params)?
                 }
                 InstrumentationType::Profiling => {
-                    // Profiling's instrumented run still goes through execute_command
-                    // which handles the Profiling mode internally
-                    self.execute_command(command, iteration, commit, params)?
+                    let (output, profile) =
+                        self.execute_command(command, iteration, commit, params)?;
+                    (output, profile, None)
                 }
                 InstrumentationType::None => unreachable!(),
             }
         } else {
-            self.execute_command(command, iteration, commit, params)?
+            let (output, profile) = self.execute_command(command, iteration, commit, params)?;
+            (output, profile, None)
         };
 
         // Stop timing (if we're not profiling, otherwise the profiler takes care of timing)
         let duration = start.elapsed();
         let duration_ms = if let Some(profile) = &profile_result {
-            // Use the duration from the profiler if available
             profile.duration * 1000.0
         } else {
             duration.as_secs_f64() * 1000.0
         };
+
+        // Determine the debug log path from the command arguments
+        let debug_log_path = Self::debug_log_path(command)
+            .filter(|p| p.exists());
 
         // Record result
         let run_result = RunResult {
@@ -296,11 +300,91 @@ impl BenchmarkRunner {
                 None
             },
             profile: profile_result,
+            flamegraph_path,
+            debug_log_path,
         };
 
         // Run conclude script after the benchmark run
         self.hook_runner.run_hook(HookStage::Conclude, &iter_args)?;
         Ok(run_result)
+    }
+
+    fn execute_command_with_flamegraph(
+        &self,
+        command: &str,
+        iteration: usize,
+        commit: &str,
+        params: &HashMap<String, String>,
+    ) -> Result<(std::process::Output, Option<ProfileResult>, Option<PathBuf>)> {
+        let params_dir = ParameterUtils::params_to_dirname(params);
+        let flamegraph_out_dir = self
+            .out_dir
+            .join(commit)
+            .join(params_dir)
+            .join(iteration.to_string());
+
+        let flamegrapher = Flamegrapher::new(flamegraph_out_dir);
+        let (flamegraph_command_vec, svg_path) = flamegrapher.wrap_command(command)?;
+        let flamegraph_command = flamegraph_command_vec.join(" ");
+
+        info!(
+            "Executing command with flamegraph instrumentation: {}",
+            flamegraph_command
+        );
+
+        let child = self.launch_command_with_affinity(&flamegraph_command)?;
+        let output = child
+            .wait_with_output()
+            .context("Failed to wait for flamegraph command completion")?;
+
+        let svg_created = flamegrapher.finalize_flamegraph_svg()?;
+        if !svg_created {
+            warn!("Flamegraph instrumentation may have failed - no SVG generated");
+        }
+
+        if !output.status.success() {
+            debug!(
+                "Flamegraph command failed with status: {}",
+                output.status.code().unwrap_or(-1)
+            );
+        }
+
+        let flamegraph_path = if svg_created { Some(svg_path) } else { None };
+
+        Ok((output, None, flamegraph_path))
+    }
+
+    fn debug_log_path(command: &str) -> Option<PathBuf> {
+        // Explicit -debuglogfile= takes priority
+        if let Some(path) = command
+            .split_whitespace()
+            .find(|a| a.starts_with("-debuglogfile="))
+            .map(|a| PathBuf::from(a.trim_start_matches("-debuglogfile=")))
+        {
+            return Some(path);
+        }
+
+        // Derive from -datadir= and -chain=
+        let datadir = command
+            .split_whitespace()
+            .find(|a| a.starts_with("-datadir="))
+            .map(|a| a.trim_start_matches("-datadir="))?;
+
+        let chain = command
+            .split_whitespace()
+            .find(|a| a.starts_with("-chain="))
+            .map(|a| a.trim_start_matches("-chain="))
+            .unwrap_or("main");
+
+        let mut path = PathBuf::from(datadir);
+        // mainnet keeps debug.log directly in the datadir;
+        // every other network uses a subdirectory
+        if chain != "main" {
+            path.push(chain);
+        }
+        path.push("debug.log");
+
+        Some(path)
     }
 
     /// Execute a command with perf instrumentation
@@ -349,50 +433,7 @@ impl BenchmarkRunner {
 
         Ok((output, None, Some(perf_data_path)))
     }
-
-    fn execute_command_with_flamegraph(
-        &self,
-        command: &str,
-        iteration: usize,
-        commit: &str,
-        params: &HashMap<String, String>,
-    ) -> Result<(std::process::Output, Option<ProfileResult>)> {
-        let params_dir = ParameterUtils::params_to_dirname(params);
-        let flamegraph_out_dir = self
-            .out_dir
-            .join(commit)
-            .join(params_dir)
-            .join(iteration.to_string());
-
-        let flamegrapher = Flamegrapher::new(flamegraph_out_dir);
-        let (flamegraph_command_vec, _svg_path) = flamegrapher.wrap_command(command)?;
-        let flamegraph_command = flamegraph_command_vec.join(" ");
-
-        info!(
-            "Executing command with flamegraph instrumentation: {}",
-            flamegraph_command
-        );
-
-        let child = self.launch_command_with_affinity(&flamegraph_command)?;
-        let output = child
-            .wait_with_output()
-            .context("Failed to wait for flamegraph command completion")?;
-
-        let svg_created = flamegrapher.finalize_flamegraph_svg()?;
-        if !svg_created {
-            warn!("Flamegraph instrumentation may have failed - no SVG generated");
-        }
-
-        if !output.status.success() {
-            debug!(
-                "Flamegraph command failed with status: {}",
-                output.status.code().unwrap_or(-1)
-            );
-        }
-
-        Ok((output, None))
-    }
-
+ 
     /// Launch a command with CPU affinity constraints
     /// This is a helper function that can be used by both regular execution and profiling
     fn launch_command_with_affinity(&self, command: &str) -> Result<std::process::Child> {
@@ -414,8 +455,14 @@ impl BenchmarkRunner {
             .capture_output(should_capture)
             .build()?;
 
-        // Launch the command using the executor
-        executor.launch_command("sh", &["-c", command])
+        #[cfg(unix)]
+        {
+            executor.launch_command("sh", &["-c", command])
+        }
+        #[cfg(windows)]
+        {
+            executor.launch_command("cmd", &["/C", command])
+        }
     }
 
     /// Execute a command and capture its output, optionally with profiling

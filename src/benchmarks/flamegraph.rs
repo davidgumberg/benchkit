@@ -41,6 +41,11 @@ impl Flamegrapher {
         }
 
         debug!("flamegraph command found and available");
+
+        if let Some(msg) = Self::check_perf_paranoid() {
+            warn!("{}", msg);
+        }
+
         Ok(())
     }
 
@@ -65,18 +70,7 @@ impl Flamegrapher {
         flamegraph_cmd.push(flamegraph_svg_path.to_string_lossy().to_string());
         // Add separator before actual command
         flamegraph_cmd.push("--".to_string());
-        #[cfg(unix)]
-        {
-            flamegraph_cmd.push("sh".to_string());
-            flamegraph_cmd.push("-c".to_string());
-            flamegraph_cmd.push(original_command.to_string());
-        }
-        #[cfg(windows)]
-        {
-            flamegraph_cmd.push("cmd".to_string());
-            flamegraph_cmd.push("/C".to_string());
-            flamegraph_cmd.push(original_command.to_string());
-        }
+        flamegraph_cmd.push(original_command.to_string());
 
         debug!("Constructed flamegraph command: {:?}", flamegraph_cmd);
         debug!("Flamegraph data will be written to: {}", flamegraph_svg_path.display());
@@ -130,6 +124,29 @@ impl Flamegrapher {
             }
 
             Ok(false)
+        }
+    }
+    /// Read `/proc/sys/kernel/perf_event_paranoid` and return a warning
+    /// message if the value is too restrictive for flamegraph profiling.
+    ///
+    /// Returns `None` on non-Linux or when the level is permissive enough.
+    pub fn check_perf_paranoid() -> Option<String> {
+        let content = std::fs::read_to_string("/proc/sys/kernel/perf_event_paranoid").ok()?;
+        let level: i32 = content.trim().parse().ok()?;
+
+        if level >= 2 {
+            Some(format!(
+                "kernel.perf_event_paranoid = {} (level >= 2 blocks CPU profiling for \
+                 unprivileged users).\n  \
+                 Flamegraph generation will likely fail silently.\n  \
+                 Fix with:  sudo sysctl kernel.perf_event_paranoid=1\n  \
+                 Or permanently in /etc/sysctl.d/:\n    \
+                 echo 'kernel.perf_event_paranoid=1' | sudo tee /etc/sysctl.d/99-perf.conf\n    \
+                 sudo sysctl --system",
+                level
+            ))
+        } else {
+            None
         }
     }
 }

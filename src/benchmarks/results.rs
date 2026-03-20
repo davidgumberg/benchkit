@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::benchmarks::profiler::ProfileResult;
 
@@ -51,6 +51,14 @@ pub struct RunResult {
     /// Profiling results (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<ProfileResult>,
+    ///
+    /// Path to a flamegraph SVG produced during this run (local only, not serialized)
+    #[serde(skip)]
+    pub flamegraph_path: Option<PathBuf>,
+
+    /// Path to a debug log captured during this run (local only, not serialized)
+    #[serde(skip)]
+    pub debug_log_path: Option<PathBuf>,
 }
 
 /// Statistical summary of benchmark runs
