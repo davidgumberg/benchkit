@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
 
         match command  {
             NetworkedCommands::Client { out_dir } => {
-                benchkit::networked::client::client_loop(&net_config, app.clone(), out_dir.clone());
+                benchkit::networked::client::client_loop(&net_config, app.clone(), out_dir.clone())?;
             }
             NetworkedCommands::Announce => {
                 benchkit::networked::announce::announce_job_loop(&net_config)
