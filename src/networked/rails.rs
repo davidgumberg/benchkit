@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
@@ -28,6 +28,7 @@ struct RunEntry {
 pub struct RailsApiClient {
     base_url: String,
     token: String,
+    certificate: Option<PathBuf>,
 }
 
 impl RailsApiClient {
@@ -35,6 +36,7 @@ impl RailsApiClient {
         Self {
             base_url: config.rails_url.clone().trim_end_matches('/').to_string(),
             token: config.rails_api_token.clone(),
+            certificate: config.certificate.clone(),
         }
     }
 
@@ -42,8 +44,37 @@ impl RailsApiClient {
         format!("{}/api/v1", self.base_url)
     }
 
+    fn load_certificate(&self) -> Result<Option<reqwest::Certificate>> {
+        match self.certificate {
+            Some(ref cert_path) => {
+                let cert_bytes = std::fs::read(cert_path)
+                    .with_context(|| format!("Failed to read certificate: {}", cert_path.display()))?;
+                let cert = reqwest::Certificate::from_pem(&cert_bytes)
+                    .context("Failed to parse PEM certificate")?;
+                Ok(Some(cert))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn build_async_client(&self) -> Result<reqwest::Client> {
+        let mut builder = reqwest::Client::builder();
+        if let Some(cert) = self.load_certificate()? {
+            builder = builder.add_root_certificate(cert);
+        }
+        builder.build().context("Failed to build async HTTP client")
+    }
+
+    fn build_blocking_client(&self) -> Result<reqwest::blocking::Client> {
+        let mut builder = reqwest::blocking::Client::builder();
+        if let Some(cert) = self.load_certificate()? {
+            builder = builder.add_root_certificate(cert);
+        }
+        builder.build().context("Failed to build blocking HTTP client")
+    }
+
     pub async fn post_job(&self, job: &Job) -> Result<()> {
-        let client = reqwest::Client::new();
+        let client = self.build_async_client()?;
         let url = format!("{}/jobs.json", self.api_url());
 
         // Safely extract the first benchmark configuration
@@ -87,7 +118,7 @@ impl RailsApiClient {
     }
 
     pub fn post_result_blocking(&self, job_uuid: Uuid, result: &BenchmarkResult) -> Result<()> {
-        let client = reqwest::blocking::Client::new();
+        let client = self.build_blocking_client()?;
         let url = format!("{}/results.json", self.api_url());
 
         let runs_attributes: Vec<_> = result.runs.iter().map(|run| {
