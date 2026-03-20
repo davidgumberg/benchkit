@@ -282,30 +282,57 @@ impl RepositoryManager {
         })
     }
 
-    /// Validate that all required commits are available in the repository
-    pub fn validate_commits(&self, commits: &[String]) -> Result<()> {
+    fn fetch_commit_from_origin(&self, repo_path: &Path, commit: &str) -> Result<()> {
+        info!("Fetching commit {commit} from origin...");
+        let status = Command::new("git")
+            .current_dir(repo_path)
+            .args(["fetch", "origin", commit])
+            .status()
+            .context(format!("Failed to fetch commit {commit} from origin"))?;
+
+        if !status.success() {
+            anyhow::bail!("git fetch origin {commit} failed with status code: {status}");
+        }
+
+        Ok(())
+    }
+
+    /// Check if a commit exists locally in the repository
+    fn commit_exists_locally(&self, repo_path: &Path, commit: &str) -> Result<bool> {
+        let output = Command::new("git")
+            .current_dir(repo_path)
+            .args(["cat-file", "-t", commit])
+            .output()
+            .context(format!("Failed to check commit: {commit}"))?;
+
+        if !output.status.success() {
+            return Ok(false);
+        }
+
+        let obj_type = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(obj_type == "commit")
+    }
+
+
+    /// Ensure all required commits are available in the repository.
+    /// For each commit, if not found locally, fetches from origin and retries.
+    pub fn ensure_commits_available(&self, commits: &[String]) -> Result<()> {
         let repo_path = self.repo_path.as_ref().ok_or_else(|| {
             anyhow::anyhow!("Repository not initialized. Call ensure_repository_available() first.")
         })?;
 
         for commit in commits {
-            // Try to get commit info to verify it exists
-            let output = Command::new("git")
-                .current_dir(repo_path)
-                .arg("cat-file")
-                .arg("-t")
-                .arg(commit)
-                .output()
-                .context(format!("Failed to check commit: {commit}"))?;
-
-            if !output.status.success() {
-                anyhow::bail!("Commit not found in repository: {}", commit);
+            if self.commit_exists_locally(repo_path, commit)? {
+                continue;
             }
 
-            // Verify it's a commit object
-            let obj_type = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if obj_type != "commit" {
-                anyhow::bail!("Object is not a commit: {} (type: {})", commit, obj_type);
+            info!("Commit {commit} not found locally, fetching from origin...");
+            self.fetch_commit_from_origin(repo_path, commit)?;
+
+            if !self.commit_exists_locally(repo_path, commit)? {
+                anyhow::bail!(
+                    "Commit not found in repository even after fetching from origin: {commit}"
+                );
             }
         }
 

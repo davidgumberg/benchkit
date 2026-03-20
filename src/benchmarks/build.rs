@@ -114,7 +114,7 @@ impl Builder {
         // If we're using a remote repository, ensure it's available
         let source_dir = if let Some(repo_manager) = &mut self.repo_manager {
             let repo_path = repo_manager.ensure_repository_available()?;
-            repo_manager.validate_commits(&self.config.bench.global.commits)?;
+            repo_manager.ensure_commits_available(&self.config.bench.global.commits)?;
             repo_path
         } else {
             // Using a local repository
