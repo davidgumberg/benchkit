@@ -58,19 +58,17 @@ impl RailsApiClient {
     }
 
     fn build_async_client(&self) -> Result<reqwest::Client> {
-        let mut builder = reqwest::Client::builder();
-        if let Some(cert) = self.load_certificate()? {
-            builder = builder.add_root_certificate(cert);
-        }
-        builder.build().context("Failed to build async HTTP client")
+        reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .context("Failed to build async HTTP client")
     }
 
     fn build_blocking_client(&self) -> Result<reqwest::blocking::Client> {
-        let mut builder = reqwest::blocking::Client::builder();
-        if let Some(cert) = self.load_certificate()? {
-            builder = builder.add_root_certificate(cert);
-        }
-        builder.build().context("Failed to build blocking HTTP client")
+        reqwest::blocking::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .context("Failed to build blocking HTTP client")
     }
 
     pub async fn post_job(&self, job: &Job) -> Result<()> {
