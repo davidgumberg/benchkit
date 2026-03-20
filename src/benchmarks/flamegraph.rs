@@ -15,10 +15,11 @@ impl Flamegrapher {
     pub fn new(output_dir: PathBuf) -> Self {
         Self {
             output_dir,
-            flamegraph_options: vec![
-                "-F".to_string(),
-                "99".to_string(), // Sample at 99Hz
-            ],
+            flamegraph_options: if cfg!(target_os = "macos") {
+                vec![] // xctrace does not support -F
+            } else {
+                vec!["-F".to_string(), "99".to_string()] // Sample at 99Hz on Linux
+            },
         }
     }
 
@@ -161,10 +162,11 @@ impl FlamegrapherBuilder {
     pub fn new(output_dir: PathBuf) -> Self {
         Self {
             output_dir,
-            flamegraph_options: vec![
-                "-F".to_string(),
-                "99".to_string(),
-            ],
+            flamegraph_options: if cfg!(target_os = "macos") {
+                vec![]
+            } else {
+                vec!["-F".to_string(), "99".to_string()]
+            },
         }
     }
 
@@ -181,6 +183,12 @@ impl FlamegrapherBuilder {
     }
 
     pub fn sampling_frequency(mut self, freq: u32) -> Self {
+        // xctrace does not support sampling frequency configuration
+        if cfg!(target_os = "macos") {
+            debug!("Sampling frequency configuration is ignored on macOS (xctrace does not support it)");
+            return self;
+        }
+
         // Is there a -F at some pos?
         if let Some(pos) = self.flamegraph_options.iter().position(|opt| opt == "-F") {
             // Drop the item at pos
@@ -215,7 +223,12 @@ mod tests {
         let instrumentor = Flamegrapher::new(temp_dir.path().to_path_buf());
 
         assert_eq!(instrumentor.output_dir, temp_dir.path());
-        assert!(!instrumentor.flamegraph_options.is_empty());
+        
+        if cfg!(target_os = "macos") {
+            assert!(instrumentor.flamegraph_options.is_empty());
+        } else {
+            assert!(!instrumentor.flamegraph_options.is_empty());
+        }
     }
 
     #[test]
@@ -226,8 +239,15 @@ mod tests {
         let (flamegraph_cmd, flamegraph_svg_path) = instrumentor.wrap_command("bitcoind -version").unwrap();
 
         assert_eq!(flamegraph_cmd[0], "flamegraph");
-        assert!(flamegraph_cmd.contains(&"-F".to_string()));
-        assert!(flamegraph_cmd.contains(&"99".to_string()));
+        
+        if cfg!(target_os = "macos") {
+            assert!(!flamegraph_cmd.contains(&"-F".to_string()));
+            assert!(!flamegraph_cmd.contains(&"99".to_string()));
+        } else {
+            assert!(flamegraph_cmd.contains(&"-F".to_string()));
+            assert!(flamegraph_cmd.contains(&"99".to_string()));
+        }
+        
         assert!(flamegraph_cmd.contains(&"--".to_string()));
         assert!(flamegraph_cmd.contains(&"bitcoind -version".to_string()));
 
@@ -242,12 +262,18 @@ mod tests {
             .add_flamegraph_option("--no-inherit".to_string())
             .build();
 
-        assert!(instrumentor.flamegraph_options.contains(&"-F".to_string()));
-        assert!(instrumentor.flamegraph_options.contains(&"50".to_string()));
+        if cfg!(target_os = "macos") {
+            assert!(!instrumentor.flamegraph_options.contains(&"-F".to_string()));
+            assert!(!instrumentor.flamegraph_options.contains(&"50".to_string()));
+        } else {
+            assert!(instrumentor.flamegraph_options.contains(&"-F".to_string()));
+            assert!(instrumentor.flamegraph_options.contains(&"50".to_string()));
+            assert!(!instrumentor.flamegraph_options.contains(&"99".to_string()));
+        }
+
         assert!(instrumentor
             .flamegraph_options
             .contains(&"--no-inherit".to_string()));
-        assert!(!instrumentor.flamegraph_options.contains(&"99".to_string()));
     }
 
     #[test]
