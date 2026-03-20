@@ -34,7 +34,7 @@ pub async fn listen_for_jobs(
 /// Set up an async thread that listens for new jobs to be announced and adds
 /// them to the queue and a synchronous thread that waits for and executes
 /// jobs in the queue.
-pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathBuf) {
+pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathBuf) -> Result<()> {
     // Create a channel for listener-executor communication.
     let (queue_sender, mut queue_receiver) = mpsc::channel::<async_nats::Message>(1024);
     
@@ -45,10 +45,8 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
             .expect("Failed to create tokio runtime");
         
         runtime.block_on(async {
-            if let Err(e) = listen_for_jobs(listener_net_config, queue_sender).await {
-                eprintln!("Job listener error: {}", e);
-            }
-        });
+            listen_for_jobs(listener_net_config, queue_sender).await
+        })
     });
     
     let processor_net_config = net_config.clone();
@@ -57,9 +55,7 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
         
         // Processes jobs synchronously, in order
         while let Some(job) = queue_receiver.blocking_recv() {
-            println!("Processing job: subject={}",
-                job.subject, 
-            );
+            println!("Processing job: subject={}", job.subject);
             
             if let Err(e) = process_job(&job, &processor_net_config, app_config.clone(), out_dir.clone()) {
                 eprintln!("Error processing job!: {:#}", e);
@@ -69,8 +65,15 @@ pub fn client_loop(net_config: &NetConfig, app_config: AppConfig, out_dir: PathB
         println!("Job processor shutting down");
     });
     
-    listener_thread.join().expect("Listener thread panicked");
+    // Check if the listener thread returned an error
+    let listener_result = listener_thread.join().expect("Listener thread panicked");
+    if let Err(e) = listener_result {
+        // Return the error up the chain so the app can exit gracefully with a non-zero code
+        return Err(anyhow::anyhow!("Job listener error: {}", e));
+    }
+
     processor_thread.join().expect("Processor thread panicked");
+    Ok(())
 }
 
 fn process_job(job_msg: &async_nats::Message, net_config: &NetConfig, app: AppConfig, out_dir: PathBuf) -> Result<()> {
