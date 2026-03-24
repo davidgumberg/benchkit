@@ -140,9 +140,9 @@ impl Flamegrapher {
                 "kernel.perf_event_paranoid = {} (level >= 2 blocks CPU profiling for \
                  unprivileged users).\n  \
                  Flamegraph generation will likely fail silently.\n  \
-                 Fix with:  sudo sysctl kernel.perf_event_paranoid=1\n  \
+                 Fix with:  sudo sysctl kernel.perf_event_paranoid=-1\n  \
                  Or permanently in /etc/sysctl.d/:\n    \
-                 echo 'kernel.perf_event_paranoid=1' | sudo tee /etc/sysctl.d/99-perf.conf\n    \
+                 echo 'kernel.perf_event_paranoid=-1' | sudo tee /etc/sysctl.d/99-perf.conf\n    \
                  sudo sysctl --system",
                 level
             ))
